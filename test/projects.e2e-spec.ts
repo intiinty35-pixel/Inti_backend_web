@@ -14,6 +14,7 @@ let app: INestApplication;
 let baseUrl: string;
 let workDir: string;
 let token: string;
+let memberToken: string;
 
 interface Reply<T = any> {
   status: number;
@@ -34,7 +35,7 @@ async function call<T = any>(method: string, path: string, options: { token?: st
   return { status: response.status, body: text ? (JSON.parse(text) as T) : (undefined as T) };
 }
 
-async function uploadImages(count: number, authToken: string | null = token): Promise<Array<{ url: string; publicId: string }>> {
+async function uploadImages(count: number, authToken: string | null = memberToken): Promise<Array<{ url: string; publicId: string }>> {
   const form = new FormData();
   for (let index = 0; index < count; index++) form.append("files", new Blob([PNG], { type: "image/png" }), `imagen-${index}.png`);
   const reply = await call("POST", "/projects/media", { form, token: authToken });
@@ -89,8 +90,8 @@ const lotizationBody = (media: Array<{ url: string; publicId: string }>, overrid
   ...overrides,
 });
 
-async function createProject(body: object): Promise<any> {
-  const reply = await call("POST", "/projects", { body });
+async function createProject(body: object, authToken: string = memberToken): Promise<any> {
+  const reply = await call("POST", "/projects", { body, token: authToken });
   expect(reply.body).toMatchObject({ id: expect.any(String) });
   expect(reply.status).toBe(201);
   return reply.body;
@@ -120,6 +121,18 @@ beforeAll(async () => {
 
   const login = await call("POST", "/auth/login", { body: ADMIN, token: null });
   token = login.body.token;
+
+  const member = await call("POST", "/users", {
+    body: { name: "Miembro E2E", email: "miembro-e2e@inti.local", password: "prueba-segura-123", role: "USER" },
+    token,
+  });
+  expect(member.status).toBe(201);
+  const memberLogin = await call("POST", "/auth/login", {
+    body: { email: "miembro-e2e@inti.local", password: "prueba-segura-123" },
+    token: null,
+  });
+  expect(memberLogin.status).toBe(201);
+  memberToken = memberLogin.body.token;
 });
 
 afterAll(async () => {
@@ -219,7 +232,7 @@ describe("autenticación", () => {
     const ownProperty = await call("POST", "/properties", { body: propertyInput("Propiedad de agente"), token: userToken });
     expect(ownProperty.status).toBe(201);
     expect(ownProperty.body.ownerId).toBe(createdUser.body.id);
-    const otherProperty = await call("POST", "/properties", { body: propertyInput("Propiedad de admin") });
+    const otherProperty = await call("POST", "/properties", { body: propertyInput("Propiedad de admin"), token: memberToken });
     expect(otherProperty.status).toBe(201);
     const ownProperties = await call("GET", "/properties/mine", { token: userToken });
     expect(ownProperties.body.map((property: { id: string }) => property.id)).toEqual([ownProperty.body.id]);
@@ -351,7 +364,7 @@ describe("validaciones de negocio", () => {
   });
 
   const invalid = async (body: object, message: RegExp) => {
-    const reply = await call("POST", "/projects", { body });
+    const reply = await call("POST", "/projects", { body, token: memberToken });
     expect(reply.status).toBe(400);
     expect(JSON.stringify(reply.body.message)).toMatch(message);
   };
@@ -398,6 +411,9 @@ describe("unidades", () => {
     expect(added.status).toBe(201);
     const sold = await call("PATCH", `/projects/units/${added.body.id}`, { body: { status: "SOLD" } });
     expect(sold.body.status).toBe("SOLD");
+    expect((await call("DELETE", `/projects/units/${added.body.id}`)).status).toBe(409);
+    const reopened = await call("PATCH", `/projects/units/${added.body.id}`, { body: { status: "AVAILABLE" } });
+    expect(reopened.status).toBe(200);
     expect((await call("DELETE", `/projects/units/${added.body.id}`)).status).toBe(204);
     expect((await call("DELETE", `/projects/units/${added.body.id}`)).status).toBe(404);
     await call("DELETE", `/projects/${project.id}`);
@@ -484,7 +500,7 @@ describe("listado, filtros y paginación", () => {
 
   it("el administrador ve también los borradores en su listado", async () => {
     const draft = await createProject(residentialBody(await uploadImages(1), { name: "Proyecto Borrador" }));
-    const all = await call("GET", "/projects/admin/all");
+    const all = await call("GET", "/projects/admin/all", { token });
     expect(all.body.items.map((item: any) => item.name)).toContain("Proyecto Borrador");
     expect(await names("search=borrador")).toEqual([]);
     await call("DELETE", `/projects/${draft.id}?force=true`);

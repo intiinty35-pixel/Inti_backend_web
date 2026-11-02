@@ -64,7 +64,9 @@ export interface Property extends Omit<CreatePropertyData, "createdByRole"> {
   id: string;
   slug: string;
   createdByRole: ProfileRole;
-  status: "PUBLISHED";
+  ownerName?: string;
+  ownerEmail?: string;
+  status: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,5 +77,5 @@ export interface PropertyRepository {
   create(data: CreatePropertyData): Promise<Property>;
   findAll(): Promise<Property[]>;
   findManaged(ownerId?: string): Promise<Property[]>;
-  deleteManaged(id: string, ownerId?: string): Promise<boolean>;
+  deleteManaged(id: string, ownerId?: string): Promise<{ publicIds: string[] } | null>;
 }

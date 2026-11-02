@@ -57,9 +57,28 @@ export function validateUnit(unit: ProjectUnitData, lotProject: boolean): Projec
   return { ...normalized, block: undefined, lotNumber: undefined, frontWidth: undefined };
 }
 
+export function unitIdentifier(unit: Pick<ProjectUnitData, "unitNumber" | "block" | "lotNumber">, lotProject: boolean): string {
+  return lotProject
+    ? `${unit.block?.trim().toLowerCase()}|${unit.lotNumber?.trim().toLowerCase()}`
+    : unit.unitNumber.trim().toLowerCase();
+}
+
+/** Impide repetir una unidad dentro del mismo proyecto, excluyendo la unidad que se está editando. */
+export function ensureUniqueUnit(
+  unit: ProjectUnitData,
+  existing: Array<Pick<ProjectUnitData, "id" | "unitNumber" | "block" | "lotNumber">>,
+  lotProject: boolean,
+  excludeId?: string,
+): void {
+  const identifier = unitIdentifier(unit, lotProject);
+  if (existing.some((item) => item.id !== excludeId && unitIdentifier(item, lotProject) === identifier)) {
+    throw new ProjectValidationError(lotProject ? "Ya existe un lote con esa manzana y número." : "Ya existe una unidad con ese número.");
+  }
+}
+
 function normalizeUnits(units: ProjectUnitData[], lotProject: boolean): ProjectUnitData[] {
   const normalized = units.map((unit) => validateUnit(unit, lotProject));
-  const identifiers = normalized.map((unit) => (lotProject ? `${unit.block}|${unit.lotNumber}` : unit.unitNumber).toLowerCase());
+  const identifiers = normalized.map((unit) => unitIdentifier(unit, lotProject));
   if (new Set(identifiers).size !== identifiers.length) {
     throw new ProjectValidationError(lotProject ? "Hay lotes repetidos en la misma manzana." : "Hay unidades con el mismo número.");
   }

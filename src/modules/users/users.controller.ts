@@ -46,7 +46,7 @@ export class UsersController {
         data: {
           name: input.name.trim(),
           email: input.email.trim().toLowerCase(),
-          passwordHash: hashPassword(input.password),
+          passwordHash: await hashPassword(input.password),
           role: input.role,
         },
         select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },

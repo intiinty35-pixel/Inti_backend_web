@@ -48,7 +48,7 @@ const demoProperties = [
   },
   {
     slug: "departamento-con-balcon-urubo-demo",
-    createdByRole: "ADMINISTRATOR",
+    createdByRole: "AGENT",
     operationType: "RENT",
     propertyType: "APARTMENT",
     title: "Departamento con balcón y vista abierta",
@@ -168,12 +168,17 @@ const demoProperties = [
 ];
 
 async function main() {
+  const agent = await prisma.user.findUnique({ where: { email: (process.env.DEMO_AGENT_EMAIL || "agente@inti.local").toLowerCase() } });
+  const user = await prisma.user.findUnique({ where: { email: (process.env.DEMO_USER_EMAIL || "usuario@inti.local").toLowerCase() } });
+
   for (const property of demoProperties) {
+    const ownerId = property.createdByRole === "USER" ? user?.id : agent?.id;
     await prisma.property.upsert({
       where: { slug: property.slug },
-      update: {},
+      update: { ownerId, createdByRole: property.createdByRole },
       create: {
         slug: property.slug,
+        ownerId,
         createdByRole: property.createdByRole,
         operationType: property.operationType,
         propertyType: property.propertyType,

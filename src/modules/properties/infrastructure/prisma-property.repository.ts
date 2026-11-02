@@ -5,11 +5,24 @@ import { PrismaService } from "../../../infrastructure/persistence/prisma.servic
 import type { CreatePropertyData, Property, PropertyRepository } from "../domain/property";
 
 const propertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
+  owner: { select: { name: true, email: true } },
   location: true,
   details: true,
   amenities: true,
   media: { orderBy: { position: "asc" } },
 });
+
+function parseSpecificDetails(value: string | null | undefined): Record<string, string | number | boolean> {
+  if (!value) return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, string | number | boolean>)
+      : {};
+  } catch {
+    return {};
+  }
+}
 type PropertyRecord = Prisma.PropertyGetPayload<{ include: typeof propertyInclude }>;
 
 @Injectable()
@@ -92,11 +105,14 @@ export class PrismaPropertyRepository implements PropertyRepository {
     return properties.map((property) => this.toDomain(property));
   }
 
-  async deleteManaged(id: string, ownerId?: string): Promise<boolean> {
-    const { count } = await this.prisma.property.deleteMany({
+  async deleteManaged(id: string, ownerId?: string): Promise<{ publicIds: string[] } | null> {
+    const existing = await this.prisma.property.findFirst({
       where: { id, ...(ownerId ? { ownerId } : {}) },
+      select: { media: { select: { publicId: true } } },
     });
-    return count > 0;
+    if (!existing) return null;
+    await this.prisma.property.deleteMany({ where: { id, ...(ownerId ? { ownerId } : {}) } });
+    return { publicIds: existing.media.flatMap((item) => (item.publicId ? [item.publicId] : [])) };
   }
 
   private toDomain(record: PropertyRecord): Property {
@@ -106,6 +122,8 @@ export class PrismaPropertyRepository implements PropertyRepository {
     return {
       id: record.id,
       ownerId: record.ownerId ?? undefined,
+      ownerName: record.owner?.name,
+      ownerEmail: record.owner?.email,
       slug: record.slug,
       createdByRole: record.createdByRole as Property["createdByRole"],
       operationType: record.operationType as Property["operationType"],
@@ -143,7 +161,7 @@ export class PrismaPropertyRepository implements PropertyRepository {
         floors: details?.floors ?? undefined,
         constructionYear: details?.constructionYear ?? undefined,
         conservationStatus: details?.conservationStatus as Property["details"]["conservationStatus"],
-        specificDetails: details?.specificDetails ? JSON.parse(details.specificDetails) : {},
+        specificDetails: parseSpecificDetails(details?.specificDetails),
       },
       amenityCodes: record.amenities.map((amenity) => amenity.code),
       media: record.media.map((item) => ({
@@ -152,7 +170,7 @@ export class PrismaPropertyRepository implements PropertyRepository {
         position: item.position,
         isCover: item.isCover,
       })),
-      status: "PUBLISHED",
+      status: record.status,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     };

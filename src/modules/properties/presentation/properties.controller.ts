@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { PROFILE_ROLES, type ProfileRole } from "../../../shared/profile-role";
 import { AdminGuard } from "../../auth/admin.guard";
+import { MemberGuard } from "../../auth/member.guard";
 import { AuthenticatedRequest, SessionGuard } from "../../auth/session.guard";
 import { CreatePropertyUseCase } from "../application/create-property.use-case";
 import { ListPropertiesUseCase } from "../application/list-properties.use-case";
@@ -16,7 +17,7 @@ export class PropertiesController {
   @Get()
   async list() {
     const properties = await this.listProperties.execute();
-    return properties.map(({ ownerId: _ownerId, ...property }) => property);
+    return properties.map(({ ownerId: _ownerId, ownerName: _ownerName, ownerEmail: _ownerEmail, ...property }) => property);
   }
 
   @Get("mine")
@@ -32,7 +33,7 @@ export class PropertiesController {
   }
 
   @Post()
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, MemberGuard)
   create(@Body() input: CreatePropertyDto, @Req() request: AuthenticatedRequest) {
     return this.createProperty.execute({
       ...input,

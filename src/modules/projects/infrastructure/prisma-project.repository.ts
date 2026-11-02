@@ -13,6 +13,7 @@ import {
   type ProjectUnit,
   type ProjectUnitData,
 } from "../domain/project";
+import { ProjectConflictError } from "../domain/project.errors";
 import {
   projectInclude,
   projectScalars,
@@ -47,8 +48,18 @@ function buildWhere(filters: ProjectFilters, includeUnpublished: boolean, ownerI
     });
   }
   if (filters.search) and.push({ OR: [{ name: { contains: filters.search } }, { description: { contains: filters.search } }] });
-  if (filters.priceMin != null) and.push({ units: { some: { price: { gte: filters.priceMin } } } });
-  if (filters.priceMax != null) and.push({ units: { some: { price: { lte: filters.priceMax } } } });
+  if (filters.priceMin != null || filters.priceMax != null) {
+    and.push({
+      units: {
+        some: {
+          price: {
+            ...(filters.priceMin != null ? { gte: filters.priceMin } : {}),
+            ...(filters.priceMax != null ? { lte: filters.priceMax } : {}),
+          },
+        },
+      },
+    });
+  }
 
   return {
     ...(ownerId ? { ownerId } : {}),
@@ -89,13 +100,16 @@ export class PrismaProjectRepository implements ProjectRepository {
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.project.findFirst({
         where: { id, ...(ownerId ? { ownerId } : {}) },
-        include: { media: true, units: { select: { id: true } } },
+        include: { media: true, units: { select: { id: true, status: true } } },
       });
       if (!existing) return null;
 
       const relations = relationCreates(data);
       const existingUnitIds = new Set(existing.units.map((unit) => unit.id));
       const keptUnitIds = new Set(data.units.flatMap((unit) => (unit.id && existingUnitIds.has(unit.id) ? [unit.id] : [])));
+      if (existing.units.some((unit) => unit.status === "SOLD" && !keptUnitIds.has(unit.id))) {
+        throw new ProjectConflictError("No se puede eliminar una unidad vendida.");
+      }
 
       await tx.project.update({ where: { id }, data: projectScalars(data) });
       await tx.projectUnit.deleteMany({ where: { projectId: id, id: { notIn: [...keptUnitIds] } } });
@@ -169,6 +183,17 @@ export class PrismaProjectRepository implements ProjectRepository {
 
   async incrementViews(id: string): Promise<void> {
     await this.prisma.project.update({ where: { id }, data: { viewsCount: { increment: 1 } } }).catch(() => undefined);
+  }
+
+  async findUnitWithProject(unitId: string, ownerId?: string): Promise<{ project: Project; unit: ProjectUnit } | null> {
+    const record = await this.prisma.project.findFirst({
+      where: { units: { some: { id: unitId } }, ...(ownerId ? { ownerId } : {}) },
+      include: projectInclude,
+    });
+    if (!record) return null;
+    const project = toProject(record);
+    const unit = project.units.find((item) => item.id === unitId);
+    return unit ? { project, unit } : null;
   }
 
   async addUnit(projectId: string, unit: ProjectUnitData, ownerId?: string): Promise<ProjectUnit | null> {

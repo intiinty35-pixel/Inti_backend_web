@@ -6,11 +6,12 @@ import { ProjectNotFoundError } from "../domain/project.errors";
 export class GetProjectUseCase {
   constructor(@Inject(PROJECT_REPOSITORY) private readonly projects: ProjectRepository) {}
 
-  /** Los visitantes solo ven proyectos publicados; el administrador puede previsualizar cualquier estado. */
-  async bySlug(slug: string, isAdmin: boolean): Promise<Project> {
+  /** Los visitantes ven publicados; el dueño puede previsualizar su borrador y el administrador cualquiera. */
+  async bySlug(slug: string, isAdmin: boolean, ownerId?: string): Promise<Project> {
     const project = await this.projects.findBySlug(slug);
-    if (!project || (project.status !== "PUBLISHED" && !isAdmin)) throw ProjectNotFoundError.project();
-    if (!isAdmin) {
+    const isOwner = Boolean(ownerId && project?.ownerId === ownerId);
+    if (!project || (project.status !== "PUBLISHED" && !isAdmin && !isOwner)) throw ProjectNotFoundError.project();
+    if (!isAdmin && !isOwner) {
       await this.projects.incrementViews(project.id);
       project.viewsCount += 1;
     }

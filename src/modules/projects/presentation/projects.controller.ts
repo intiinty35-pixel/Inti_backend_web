@@ -4,6 +4,7 @@ import { RateLimiter } from "../../../common/rate-limiter";
 import { PrismaService } from "../../../infrastructure/persistence/prisma.service";
 import { AdminGuard, readBearerToken, type RequestWithAuthorization } from "../../auth/admin.guard";
 import { AuthTokenService } from "../../auth/auth-token.service";
+import { MemberGuard } from "../../auth/member.guard";
 import { AuthenticatedRequest, SessionGuard } from "../../auth/session.guard";
 import { ChangeProjectStatusUseCase } from "../application/change-project-status.use-case";
 import { CreateProjectUseCase } from "../application/create-project.use-case";
@@ -43,28 +44,32 @@ export class ProjectsController {
     private readonly config: ConfigService,
   ) {}
 
-  private async isAdmin(request: RequestWithAuthorization): Promise<boolean> {
+  private async viewer(request: RequestWithAuthorization): Promise<{ isAdmin: boolean; userId?: string }> {
     const payload = await this.tokens.verify(readBearerToken(request));
-    if (payload?.role !== "ADMINISTRATOR") return false;
+    if (!payload) return { isAdmin: false };
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { role: true, isActive: true },
+      select: { id: true, role: true, isActive: true },
     }) ?? await this.prisma.user.findUnique({
       where: { email: payload.sub.trim().toLowerCase() },
-      select: { role: true, isActive: true },
+      select: { id: true, role: true, isActive: true },
     });
-    if (user) return user.role === "ADMINISTRATOR" && user.isActive;
+    if (user) {
+      return user.isActive ? { isAdmin: user.role === "ADMINISTRATOR", userId: user.id } : { isAdmin: false };
+    }
 
     const adminEmail = this.config.get<string>("app.adminEmail", "admin@inti.local").toLowerCase();
-    return payload.sub.toLowerCase() === adminEmail;
+    const isAdmin = payload.role === "ADMINISTRATOR" && payload.sub.toLowerCase() === adminEmail;
+    return { isAdmin, userId: isAdmin ? payload.sub : undefined };
   }
 
   // Las rutas fijas van antes que las dinámicas (:slug, :id) para que no se confundan.
 
   @Get()
-  list(@Query() filters: ListProjectsQuery) {
-    return this.listProjects.execute(filters);
+  async list(@Query() filters: ListProjectsQuery) {
+    const page = await this.listProjects.execute(filters);
+    return { ...page, items: page.items.map(({ ownerId: _ownerId, ...item }) => item) };
   }
 
   @Get("admin/all")
@@ -113,11 +118,17 @@ export class ProjectsController {
 
   @Get(":slug")
   async detail(@Param("slug") slug: string, @Req() request: RequestWithAuthorization) {
-    return this.getProject.bySlug(slug, await this.isAdmin(request));
+    const viewer = await this.viewer(request);
+    const project = await this.getProject.bySlug(slug, viewer.isAdmin, viewer.userId);
+    if (!viewer.isAdmin && project.ownerId !== viewer.userId) {
+      const { ownerId: _ownerId, ...publicProject } = project;
+      return publicProject;
+    }
+    return project;
   }
 
   @Post()
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, MemberGuard)
   create(@Body() input: ProjectDto, @Req() request: AuthenticatedRequest) {
     return this.createProject.execute(input, request.auth.id);
   }
@@ -149,7 +160,7 @@ export class ProjectsController {
 
   @Get(":id/comments")
   async listComments(@Param("id") id: string, @Req() request: RequestWithAuthorization) {
-    return this.comments.list(id, await this.isAdmin(request));
+    return this.comments.list(id, (await this.viewer(request)).isAdmin);
   }
 
   @Post(":id/comments")

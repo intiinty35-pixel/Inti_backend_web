@@ -163,13 +163,14 @@ const demoProjects = [
   },
 ];
 
-async function seedProject(project) {
+async function seedProject(project, ownerId) {
   const { units, media, amenities, timeline, comments, ...fields } = project;
   // Reemplaza el proyecto demo anterior (si existe) para poder repetir el seed sin duplicados.
   await prisma.project.deleteMany({ where: { slug: project.slug } });
   await prisma.project.create({
     data: {
       ...fields,
+      ownerId,
       units: { create: units },
       media: { create: media },
       amenities: { create: amenities.map((name) => ({ name })) },
@@ -180,7 +181,8 @@ async function seedProject(project) {
 }
 
 async function main() {
-  for (const project of demoProjects) await seedProject(project);
+  const agent = await prisma.user.findUnique({ where: { email: (process.env.DEMO_AGENT_EMAIL || "agente@inti.local").toLowerCase() } });
+  for (const project of demoProjects) await seedProject(project, agent?.id);
   console.log(`Se cargaron ${demoProjects.length} proyectos de demostración.`);
 }
 

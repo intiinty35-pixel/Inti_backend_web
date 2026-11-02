@@ -194,6 +194,7 @@ export interface ProjectRepository {
   findMany(filters: ProjectFilters, includeUnpublished: boolean, ownerId?: string): Promise<ProjectPage>;
   incrementViews(id: string): Promise<void>;
 
+  findUnitWithProject(unitId: string, ownerId?: string): Promise<{ project: Project; unit: ProjectUnit } | null>;
   addUnit(projectId: string, unit: ProjectUnitData, ownerId?: string): Promise<ProjectUnit | null>;
   updateUnit(unitId: string, unit: Partial<ProjectUnitData>, ownerId?: string): Promise<ProjectUnit | null>;
   deleteUnit(unitId: string, ownerId?: string): Promise<boolean>;

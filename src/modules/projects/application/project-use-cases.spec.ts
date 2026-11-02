@@ -1,4 +1,4 @@
-import type { Project, ProjectRepository, ProjectStatus } from "../domain/project";
+import type { Project, ProjectRepository, ProjectStatus, ProjectUnit } from "../domain/project";
 import { ProjectConflictError, ProjectNotFoundError, ProjectValidationError } from "../domain/project.errors";
 import type { ProjectFileStorage } from "../infrastructure/project-file-storage";
 import { DeleteProjectUseCase } from "./delete-project.use-case";
@@ -28,6 +28,7 @@ function fakeRepository(): jest.Mocked<ProjectRepository> {
     listComments: jest.fn(),
     addComment: jest.fn(),
     deleteComment: jest.fn(),
+    findUnitWithProject: jest.fn(),
   };
 }
 
@@ -152,10 +153,25 @@ describe("ManageProjectUnitsUseCase", () => {
 
   it("falla al actualizar o borrar una unidad inexistente", async () => {
     const repository = fakeRepository();
-    repository.updateUnit.mockResolvedValue(null);
-    repository.deleteUnit.mockResolvedValue(false);
+    repository.findUnitWithProject.mockResolvedValue(null);
     const units = new ManageProjectUnitsUseCase(repository);
     await expect(units.update("u1", { status: "SOLD" })).rejects.toBeInstanceOf(ProjectNotFoundError);
     await expect(units.remove("u1")).rejects.toBeInstanceOf(ProjectNotFoundError);
+  });
+
+  it("rechaza identificadores duplicados al agregar o actualizar", async () => {
+    const repository = fakeRepository();
+    repository.findById.mockResolvedValue(fakeProject({ type: "RESIDENTIAL", units: [{ id: "u1", unitNumber: "101", type: "APARTMENT", status: "AVAILABLE" } as ProjectUnit] }));
+    await expect(new ManageProjectUnitsUseCase(repository).add("p1", { unitNumber: "101", type: "APARTMENT", status: "AVAILABLE" })).rejects.toBeInstanceOf(ProjectValidationError);
+
+    repository.findUnitWithProject.mockResolvedValue({ project: fakeProject({ type: "RESIDENTIAL", units: [{ id: "u1", unitNumber: "101", type: "APARTMENT", status: "AVAILABLE" } as ProjectUnit, { id: "u2", unitNumber: "102", type: "APARTMENT", status: "AVAILABLE" } as ProjectUnit] }), unit: { id: "u2", unitNumber: "102", type: "APARTMENT", status: "AVAILABLE" } as ProjectUnit });
+    await expect(new ManageProjectUnitsUseCase(repository).update("u2", { unitNumber: "101" })).rejects.toBeInstanceOf(ProjectValidationError);
+  });
+
+  it("no elimina unidades vendidas", async () => {
+    const repository = fakeRepository();
+    repository.findUnitWithProject.mockResolvedValue({ project: fakeProject({ type: "RESIDENTIAL", units: [{ id: "u1", unitNumber: "101", type: "APARTMENT", status: "SOLD" } as ProjectUnit] }), unit: { id: "u1", unitNumber: "101", type: "APARTMENT", status: "SOLD" } as ProjectUnit });
+    await expect(new ManageProjectUnitsUseCase(repository).remove("u1")).rejects.toBeInstanceOf(ProjectConflictError);
+    expect(repository.deleteUnit).not.toHaveBeenCalled();
   });
 });
