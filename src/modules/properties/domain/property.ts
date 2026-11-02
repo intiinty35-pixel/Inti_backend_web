@@ -2,7 +2,7 @@ import type { ProfileRole } from "../../../shared/profile-role";
 
 export type OperationType = "SALE" | "RENT" | "TEMPORARY_RENT" | "TRANSFER";
 export type PropertyType = "APARTMENT" | "HOUSE" | "LAND" | "OFFICE" | "COMMERCIAL" | "ROOM" | "WAREHOUSE" | "PARKING";
-export type Currency = "PEN" | "USD";
+export type Currency = "BOB" | "USD";
 export type ConservationStatus = "NEW" | "EXCELLENT" | "GOOD" | "REMODELED" | "TO_REMODEL" | "UNDER_CONSTRUCTION";
 
 export interface PropertyLocation {

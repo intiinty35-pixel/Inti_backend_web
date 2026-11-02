@@ -22,7 +22,7 @@ import type { ConservationStatus, CreatePropertyData } from "../domain/property"
 
 const OPERATION_TYPES = ["SALE", "RENT", "TEMPORARY_RENT", "TRANSFER"];
 const PROPERTY_TYPES = ["APARTMENT", "HOUSE", "LAND", "OFFICE", "COMMERCIAL", "ROOM", "WAREHOUSE", "PARKING"];
-const CURRENCIES = ["PEN", "USD"];
+const CURRENCIES = ["BOB", "USD"];
 const CONSERVATION_STATUSES = ["NEW", "EXCELLENT", "GOOD", "REMODELED", "TO_REMODEL", "UNDER_CONSTRUCTION"];
 
 export class PropertyLocationDto {
