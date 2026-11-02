@@ -19,8 +19,8 @@ export class ProjectCommentsUseCase {
     return this.projects.addComment(projectId, name, text);
   }
 
-  async remove(commentId: string): Promise<void> {
-    if (!(await this.projects.deleteComment(commentId))) throw ProjectNotFoundError.comment();
+  async remove(commentId: string, ownerId?: string): Promise<void> {
+    if (!(await this.projects.deleteComment(commentId, ownerId))) throw ProjectNotFoundError.comment();
   }
 
   private async requireVisibleProject(projectId: string, isAdmin: boolean): Promise<void> {

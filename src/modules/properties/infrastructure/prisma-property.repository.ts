@@ -27,6 +27,7 @@ export class PrismaPropertyRepository implements PropertyRepository {
 
     const property = await this.prisma.property.create({
       data: {
+        ownerId: data.ownerId,
         slug: `${slugBase}-${randomUUID().slice(0, 8)}`,
         createdByRole: data.createdByRole,
         operationType: data.operationType,
@@ -82,12 +83,29 @@ export class PrismaPropertyRepository implements PropertyRepository {
     return properties.map((property) => this.toDomain(property));
   }
 
+  async findManaged(ownerId?: string): Promise<Property[]> {
+    const properties = await this.prisma.property.findMany({
+      ...(ownerId ? { where: { ownerId } } : {}),
+      orderBy: { createdAt: "desc" },
+      include: propertyInclude,
+    });
+    return properties.map((property) => this.toDomain(property));
+  }
+
+  async deleteManaged(id: string, ownerId?: string): Promise<boolean> {
+    const { count } = await this.prisma.property.deleteMany({
+      where: { id, ...(ownerId ? { ownerId } : {}) },
+    });
+    return count > 0;
+  }
+
   private toDomain(record: PropertyRecord): Property {
     const location = record.location;
     const details = record.details;
 
     return {
       id: record.id,
+      ownerId: record.ownerId ?? undefined,
       slug: record.slug,
       createdByRole: record.createdByRole as Property["createdByRole"],
       operationType: record.operationType as Property["operationType"],

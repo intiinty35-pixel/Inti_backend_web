@@ -131,6 +131,7 @@ export interface ProjectTimelineEntry extends ProjectTimelineData {
 
 export interface ProjectSummary extends Omit<ProjectInput, "units" | "media" | "amenities" | "timeline"> {
   id: string;
+  ownerId?: string;
   slug: string;
   status: ProjectStatus;
   constructionProgress: number;
@@ -182,22 +183,22 @@ export const MAX_PAGE_SIZE = 50;
 export const PROJECT_REPOSITORY = Symbol("PROJECT_REPOSITORY");
 
 export interface ProjectRepository {
-  create(data: ProjectInput): Promise<Project>;
+  create(data: ProjectInput, ownerId?: string): Promise<Project>;
   /** Devuelve null si el proyecto no existe; `removedPublicIds` son las imágenes que dejaron de usarse. */
-  update(id: string, data: ProjectInput): Promise<{ project: Project; removedPublicIds: string[] } | null>;
+  update(id: string, data: ProjectInput, ownerId?: string): Promise<{ project: Project; removedPublicIds: string[] } | null>;
   /** Devuelve los archivos del proyecto eliminado, o null si no existía. */
-  delete(id: string): Promise<{ publicIds: string[] } | null>;
-  setStatus(id: string, status: ProjectStatus): Promise<Project | null>;
-  findById(id: string): Promise<Project | null>;
+  delete(id: string, ownerId?: string): Promise<{ publicIds: string[] } | null>;
+  setStatus(id: string, status: ProjectStatus, ownerId?: string): Promise<Project | null>;
+  findById(id: string, ownerId?: string): Promise<Project | null>;
   findBySlug(slug: string): Promise<Project | null>;
-  findMany(filters: ProjectFilters, includeUnpublished: boolean): Promise<ProjectPage>;
+  findMany(filters: ProjectFilters, includeUnpublished: boolean, ownerId?: string): Promise<ProjectPage>;
   incrementViews(id: string): Promise<void>;
 
-  addUnit(projectId: string, unit: ProjectUnitData): Promise<ProjectUnit | null>;
-  updateUnit(unitId: string, unit: Partial<ProjectUnitData>): Promise<ProjectUnit | null>;
-  deleteUnit(unitId: string): Promise<boolean>;
+  addUnit(projectId: string, unit: ProjectUnitData, ownerId?: string): Promise<ProjectUnit | null>;
+  updateUnit(unitId: string, unit: Partial<ProjectUnitData>, ownerId?: string): Promise<ProjectUnit | null>;
+  deleteUnit(unitId: string, ownerId?: string): Promise<boolean>;
 
   listComments(projectId: string): Promise<ProjectComment[]>;
   addComment(projectId: string, authorName: string, content: string): Promise<ProjectComment>;
-  deleteComment(commentId: string): Promise<boolean>;
+  deleteComment(commentId: string, ownerId?: string): Promise<boolean>;
 }

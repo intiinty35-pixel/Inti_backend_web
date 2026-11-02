@@ -41,6 +41,7 @@ export interface PropertyMedia {
 
 export interface CreatePropertyData {
   createdByRole: ProfileRole;
+  ownerId?: string;
   operationType: OperationType;
   propertyType: PropertyType;
   title: string;
@@ -73,4 +74,6 @@ export const PROPERTY_REPOSITORY = Symbol("PROPERTY_REPOSITORY");
 export interface PropertyRepository {
   create(data: CreatePropertyData): Promise<Property>;
   findAll(): Promise<Property[]>;
+  findManaged(ownerId?: string): Promise<Property[]>;
+  deleteManaged(id: string, ownerId?: string): Promise<boolean>;
 }

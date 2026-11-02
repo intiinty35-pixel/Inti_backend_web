@@ -6,7 +6,7 @@ import { normalizeProjectInput } from "./project-rules";
 export class CreateProjectUseCase {
   constructor(@Inject(PROJECT_REPOSITORY) private readonly projects: ProjectRepository) {}
 
-  execute(input: ProjectInput): Promise<Project> {
-    return this.projects.create(normalizeProjectInput(input));
+  execute(input: ProjectInput, ownerId?: string): Promise<Project> {
+    return this.projects.create(normalizeProjectInput(input), ownerId);
   }
 }

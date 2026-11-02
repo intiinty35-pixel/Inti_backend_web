@@ -25,8 +25,16 @@ import {
   unitScalars,
 } from "./project.mapper";
 
+type CommentRecord = {
+  id: string;
+  projectId: string;
+  authorName: string;
+  content: string;
+  createdAt: Date;
+};
+
 /** Convierte los filtros públicos en una condición de Prisma; el precio se compara contra las unidades del proyecto. */
-function buildWhere(filters: ProjectFilters, includeUnpublished: boolean): Prisma.ProjectWhereInput {
+function buildWhere(filters: ProjectFilters, includeUnpublished: boolean, ownerId?: string): Prisma.ProjectWhereInput {
   const and: Prisma.ProjectWhereInput[] = [];
   if (filters.location) {
     and.push({
@@ -43,6 +51,7 @@ function buildWhere(filters: ProjectFilters, includeUnpublished: boolean): Prism
   if (filters.priceMax != null) and.push({ units: { some: { price: { lte: filters.priceMax } } } });
 
   return {
+    ...(ownerId ? { ownerId } : {}),
     ...(includeUnpublished ? {} : { status: "PUBLISHED" }),
     ...(filters.type ? { type: filters.type } : {}),
     ...(filters.phase ? { phase: filters.phase } : {}),
@@ -51,14 +60,19 @@ function buildWhere(filters: ProjectFilters, includeUnpublished: boolean): Prism
   };
 }
 
+function toComment(record: CommentRecord): ProjectComment {
+  return { ...record, createdAt: record.createdAt.toISOString() };
+}
+
 @Injectable()
 export class PrismaProjectRepository implements ProjectRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(data: ProjectInput): Promise<Project> {
+  async create(data: ProjectInput, ownerId?: string): Promise<Project> {
     const relations = relationCreates(data);
     const record = await this.prisma.project.create({
       data: {
+        ownerId,
         ...projectScalars(data),
         slug: slugify(data.name),
         units: { create: relations.units },
@@ -71,9 +85,12 @@ export class PrismaProjectRepository implements ProjectRepository {
     return toProject(record);
   }
 
-  async update(id: string, data: ProjectInput): Promise<{ project: Project; removedPublicIds: string[] } | null> {
+  async update(id: string, data: ProjectInput, ownerId?: string): Promise<{ project: Project; removedPublicIds: string[] } | null> {
     return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.project.findUnique({ where: { id }, include: { media: true, units: { select: { id: true } } } });
+      const existing = await tx.project.findFirst({
+        where: { id, ...(ownerId ? { ownerId } : {}) },
+        include: { media: true, units: { select: { id: true } } },
+      });
       if (!existing) return null;
 
       const relations = relationCreates(data);
@@ -104,22 +121,26 @@ export class PrismaProjectRepository implements ProjectRepository {
     });
   }
 
-  async delete(id: string): Promise<{ publicIds: string[] } | null> {
-    const existing = await this.prisma.project.findUnique({ where: { id }, select: { media: { select: { publicId: true } } } });
+  async delete(id: string, ownerId?: string): Promise<{ publicIds: string[] } | null> {
+    const existing = await this.prisma.project.findFirst({
+      where: { id, ...(ownerId ? { ownerId } : {}) },
+      select: { media: { select: { publicId: true } } },
+    });
     if (!existing) return null;
-    await this.prisma.project.delete({ where: { id } });
+    await this.prisma.project.deleteMany({ where: { id, ...(ownerId ? { ownerId } : {}) } });
     return { publicIds: existing.media.flatMap((item) => (item.publicId ? [item.publicId] : [])) };
   }
 
-  async setStatus(id: string, status: ProjectStatus): Promise<Project | null> {
-    const exists = await this.prisma.project.count({ where: { id } });
-    if (!exists) return null;
-    const record = await this.prisma.project.update({ where: { id }, data: { status }, include: projectInclude });
-    return toProject(record);
+  async setStatus(id: string, status: ProjectStatus, ownerId?: string): Promise<Project | null> {
+    const { count } = await this.prisma.project.updateMany({ where: { id, ...(ownerId ? { ownerId } : {}) }, data: { status } });
+    if (!count) return null;
+
+    const record = await this.prisma.project.findUnique({ where: { id }, include: projectInclude });
+    return record ? toProject(record) : null;
   }
 
-  async findById(id: string): Promise<Project | null> {
-    const record = await this.prisma.project.findUnique({ where: { id }, include: projectInclude });
+  async findById(id: string, ownerId?: string): Promise<Project | null> {
+    const record = await this.prisma.project.findFirst({ where: { id, ...(ownerId ? { ownerId } : {}) }, include: projectInclude });
     return record ? toProject(record) : null;
   }
 
@@ -128,10 +149,10 @@ export class PrismaProjectRepository implements ProjectRepository {
     return record ? toProject(record) : null;
   }
 
-  async findMany(filters: ProjectFilters, includeUnpublished: boolean): Promise<ProjectPage> {
+  async findMany(filters: ProjectFilters, includeUnpublished: boolean, ownerId?: string): Promise<ProjectPage> {
     const page = filters.page ?? 1;
     const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
-    const where = buildWhere(filters, includeUnpublished);
+    const where = buildWhere(filters, includeUnpublished, ownerId);
 
     const [total, records] = await this.prisma.$transaction([
       this.prisma.project.count({ where }),
@@ -150,41 +171,51 @@ export class PrismaProjectRepository implements ProjectRepository {
     await this.prisma.project.update({ where: { id }, data: { viewsCount: { increment: 1 } } }).catch(() => undefined);
   }
 
-  async addUnit(projectId: string, unit: ProjectUnitData): Promise<ProjectUnit | null> {
-    const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { _count: { select: { units: true } } } });
+  async addUnit(projectId: string, unit: ProjectUnitData, ownerId?: string): Promise<ProjectUnit | null> {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ...(ownerId ? { ownerId } : {}) },
+      select: { _count: { select: { units: true } } },
+    });
     if (!project) return null;
     const record = await this.prisma.projectUnit.create({ data: { ...unitScalars(unit, project._count.units), projectId } });
     return toUnit(record);
   }
 
-  async updateUnit(unitId: string, unit: Partial<ProjectUnitData>): Promise<ProjectUnit | null> {
-    const exists = await this.prisma.projectUnit.count({ where: { id: unitId } });
-    if (!exists) return null;
+  async updateUnit(unitId: string, unit: Partial<ProjectUnitData>, ownerId?: string): Promise<ProjectUnit | null> {
     const { id: _ignored, ...fields } = unit;
-    const record = await this.prisma.projectUnit.update({
-      where: { id: unitId },
-      data: Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)),
+    const data = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+    const where: Prisma.ProjectUnitWhereInput = { id: unitId, ...(ownerId ? { project: { is: { ownerId } } } : {}) };
+    const { count } = await this.prisma.projectUnit.updateMany({
+      where,
+      data,
     });
-    return toUnit(record);
+    if (!count) return null;
+
+    const record = await this.prisma.projectUnit.findUnique({
+      where: { id: unitId },
+    });
+    return record ? toUnit(record) : null;
   }
 
-  async deleteUnit(unitId: string): Promise<boolean> {
-    const { count } = await this.prisma.projectUnit.deleteMany({ where: { id: unitId } });
+  async deleteUnit(unitId: string, ownerId?: string): Promise<boolean> {
+    const where: Prisma.ProjectUnitWhereInput = { id: unitId, ...(ownerId ? { project: { is: { ownerId } } } : {}) };
+    const { count } = await this.prisma.projectUnit.deleteMany({ where });
     return count > 0;
   }
 
   async listComments(projectId: string): Promise<ProjectComment[]> {
     const records = await this.prisma.projectComment.findMany({ where: { projectId }, orderBy: { createdAt: "desc" } });
-    return records.map((record) => ({ ...record, createdAt: record.createdAt.toISOString() }));
+    return records.map(toComment);
   }
 
   async addComment(projectId: string, authorName: string, content: string): Promise<ProjectComment> {
     const record = await this.prisma.projectComment.create({ data: { projectId, authorName, content } });
-    return { ...record, createdAt: record.createdAt.toISOString() };
+    return toComment(record);
   }
 
-  async deleteComment(commentId: string): Promise<boolean> {
-    const { count } = await this.prisma.projectComment.deleteMany({ where: { id: commentId } });
+  async deleteComment(commentId: string, ownerId?: string): Promise<boolean> {
+    const where: Prisma.ProjectCommentWhereInput = { id: commentId, ...(ownerId ? { project: { is: { ownerId } } } : {}) };
+    const { count } = await this.prisma.projectComment.deleteMany({ where });
     return count > 0;
   }
 }

@@ -4,6 +4,7 @@ import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PrismaService } from "../src/infrastructure/persistence/prisma.service";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 const ADMIN = { email: "admin@inti.local", password: "contrasena-de-prueba" };
@@ -130,8 +131,107 @@ afterAll(async () => {
 describe("autenticación", () => {
   it("el login correcto devuelve un token y el incorrecto es rechazado", async () => {
     expect(token).toEqual(expect.any(String));
+    const prisma = app.get(PrismaService);
+    await prisma.user.update({
+      where: { email: ADMIN.email },
+      data: { passwordHash: "hash-anterior" },
+    });
+    const configuredAdmin = await call("POST", "/auth/login", { body: ADMIN, token: null });
+    expect(configuredAdmin.status).toBe(201);
+    expect(configuredAdmin.body).toMatchObject({ role: "ADMINISTRATOR", email: ADMIN.email });
+
+    const oldAdminPassword = await call("POST", "/auth/login", {
+      body: { email: ADMIN.email, password: "hash-anterior" },
+      token: null,
+    });
+    expect(oldAdminPassword.status).toBe(401);
+
     const wrong = await call("POST", "/auth/login", { body: { email: ADMIN.email, password: "incorrecta123" }, token: null });
     expect(wrong.status).toBe(401);
+  });
+
+  it("registra usuarios recurrentes y devuelve las series mensuales del dashboard", async () => {
+    const createdUser = await call("POST", "/users", {
+      body: { name: "Usuario recurrente", email: "recurrente-test@inti.local", password: "prueba-segura-123", role: "USER" },
+    });
+    expect(createdUser.status).toBe(201);
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const login = await call("POST", "/auth/login", {
+        body: { email: "recurrente-test@inti.local", password: "prueba-segura-123" },
+        token: null,
+      });
+      expect(login.status).toBe(201);
+    }
+
+    const prisma = app.get(PrismaService);
+    expect(await prisma.loginEvent.count({ where: { userId: createdUser.body.id } })).toBe(2);
+    const dashboard = await call("GET", "/dashboard/metrics");
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    expect(dashboard.status).toBe(200);
+    expect(dashboard.body.newUsersByMonth).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: currentMonth, value: expect.any(Number) }),
+    ]));
+    expect(dashboard.body.recurringUsersByMonth).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: currentMonth, value: expect.any(Number) }),
+    ]));
+    expect(dashboard.body.recurringUsersByMonth.find((month: { label: string }) => month.label === currentMonth).value).toBeGreaterThanOrEqual(1);
+  });
+
+  it("separa las cuentas, los proyectos y las propiedades por rol y propietario", async () => {
+    const createdUser = await call("POST", "/users", {
+      body: { name: "Agente de prueba", email: "agente-test@inti.local", password: "prueba-segura-123", role: "AGENT" },
+    });
+    expect(createdUser.status).toBe(201);
+    const userLogin = await call("POST", "/auth/login", {
+      body: { email: "agente-test@inti.local", password: "prueba-segura-123" },
+      token: null,
+    });
+    expect(userLogin.status).toBe(201);
+    const userToken = userLogin.body.token as string;
+    expect(userLogin.body).toMatchObject({ role: "AGENT", email: "agente-test@inti.local" });
+    expect((await call("GET", "/users", { token: userToken })).status).toBe(401);
+    expect((await call("GET", "/dashboard/metrics", { token: userToken })).status).toBe(401);
+
+    const ownProjectBody = residentialBody(await uploadImages(1, userToken));
+    const ownProject = await call("POST", "/projects", { body: ownProjectBody, token: userToken });
+    expect(ownProject.status).toBe(201);
+    const otherProject = await createProject(residentialBody(await uploadImages(1)));
+    const ownProjects = await call("GET", "/projects/mine", { token: userToken });
+    expect(ownProjects.body.items.map((project: { id: string }) => project.id)).toEqual([ownProject.body.id]);
+    expect((await call("GET", "/projects/admin/all", { token: userToken })).status).toBe(401);
+    expect((await call("PUT", `/projects/${otherProject.id}`, { body: ownProjectBody, token: userToken })).status).toBe(404);
+    expect((await call("DELETE", `/projects/${otherProject.id}?force=true`, { token: userToken })).status).toBe(404);
+
+    const propertyInput = (title: string) => ({
+      createdByRole: "USER",
+      operationType: "SALE",
+      propertyType: "APARTMENT",
+      title,
+      description: "Departamento amplio de prueba con una descripción suficientemente larga para validar correctamente la publicación en el portal de Inti.",
+      price: 120000,
+      currency: "BOB",
+      location: { department: "Santa Cruz", province: "Andrés Ibáñez", district: "Centro", address: "Calle de prueba 10", approximateLocation: true },
+      details: { bedrooms: 2, bathrooms: 1 },
+      amenityCodes: [],
+      media: [{ url: "https://example.test/property.png" }],
+    });
+    const ownProperty = await call("POST", "/properties", { body: propertyInput("Propiedad de agente"), token: userToken });
+    expect(ownProperty.status).toBe(201);
+    expect(ownProperty.body.ownerId).toBe(createdUser.body.id);
+    const otherProperty = await call("POST", "/properties", { body: propertyInput("Propiedad de admin") });
+    expect(otherProperty.status).toBe(201);
+    const ownProperties = await call("GET", "/properties/mine", { token: userToken });
+    expect(ownProperties.body.map((property: { id: string }) => property.id)).toEqual([ownProperty.body.id]);
+    expect((await call("GET", "/properties/admin/all")).body.map((property: { id: string }) => property.id)).toContain(otherProperty.body.id);
+    expect((await call("DELETE", `/properties/${otherProperty.body.id}`, { token: userToken })).status).toBe(404);
+    const publicProperty = (await call("GET", "/properties", { token: null })).body.find((property: { id: string }) => property.id === ownProperty.body.id);
+    expect(publicProperty).not.toHaveProperty("ownerId");
+
+    await call("DELETE", `/projects/${ownProject.body.id}?force=true`);
+    await call("DELETE", `/projects/${otherProject.id}?force=true`);
+    await call("DELETE", `/properties/${ownProperty.body.id}`);
+    await call("DELETE", `/properties/${otherProperty.body.id}`);
   });
 
   it("limita los intentos de login desde la misma IP", async () => {

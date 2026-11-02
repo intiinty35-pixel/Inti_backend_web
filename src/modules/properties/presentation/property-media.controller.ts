@@ -1,10 +1,11 @@
-import { BadRequestException, Controller, Get, NotFoundException, Param, Post, StreamableFile, UploadedFiles, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Controller, Get, NotFoundException, Param, Post, StreamableFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { createReadStream, existsSync, mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { basename, extname, join } from "node:path";
 import { diskStorage } from "multer";
 import { ConfigService } from "@nestjs/config";
+import { SessionGuard } from "../../auth/session.guard";
 
 const UPLOAD_DIRECTORY = join(process.cwd(), "uploads", "properties");
 const ALLOWED_MIME_TYPES: Record<string, string> = {
@@ -18,6 +19,7 @@ export class PropertyMediaController {
   constructor(private readonly config: ConfigService) {}
 
   @Post()
+  @UseGuards(SessionGuard)
   @UseInterceptors(
     FilesInterceptor("files", 12, {
       storage: diskStorage({

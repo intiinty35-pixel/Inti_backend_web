@@ -17,8 +17,8 @@ export class GetProjectUseCase {
     return project;
   }
 
-  async byId(id: string): Promise<Project> {
-    const project = await this.projects.findById(id);
+  async byId(id: string, ownerId?: string): Promise<Project> {
+    const project = await this.projects.findById(id, ownerId);
     if (!project) throw ProjectNotFoundError.project();
     return project;
   }

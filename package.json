@@ -13,6 +13,7 @@
     "db:studio": "prisma studio",
     "db:seed": "node --env-file=.env prisma/seed-demo.cjs",
     "db:seed:projects": "node --env-file=.env prisma/seed-projects.cjs",
+    "db:seed:users": "node --env-file=.env prisma/seed-users.cjs",
     "test": "node --experimental-vm-modules --no-warnings node_modules/jest/bin/jest.js",
     "test:e2e": "node --experimental-vm-modules --no-warnings node_modules/jest/bin/jest.js --config test/jest-e2e.config.cjs --runInBand"
   },

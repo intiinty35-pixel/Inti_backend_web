@@ -11,8 +11,8 @@ export class UpdateProjectUseCase {
     private readonly files: ProjectFileStorage,
   ) {}
 
-  async execute(id: string, input: ProjectInput): Promise<Project> {
-    const result = await this.projects.update(id, normalizeProjectInput(input));
+  async execute(id: string, input: ProjectInput, ownerId?: string): Promise<Project> {
+    const result = await this.projects.update(id, normalizeProjectInput(input), ownerId);
     if (!result) throw ProjectNotFoundError.project();
     await this.files.remove(result.removedPublicIds);
     return result.project;

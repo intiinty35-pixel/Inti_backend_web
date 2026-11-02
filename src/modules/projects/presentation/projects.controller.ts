@@ -1,7 +1,10 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpException, HttpStatus, Ip, Param, Patch, Post, Put, Query, Req, UseFilters, UseGuards } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { RateLimiter } from "../../../common/rate-limiter";
+import { PrismaService } from "../../../infrastructure/persistence/prisma.service";
 import { AdminGuard, readBearerToken, type RequestWithAuthorization } from "../../auth/admin.guard";
 import { AuthTokenService } from "../../auth/auth-token.service";
+import { AuthenticatedRequest, SessionGuard } from "../../auth/session.guard";
 import { ChangeProjectStatusUseCase } from "../application/change-project-status.use-case";
 import { CreateProjectUseCase } from "../application/create-project.use-case";
 import { DeleteProjectUseCase } from "../application/delete-project.use-case";
@@ -36,10 +39,25 @@ export class ProjectsController {
     private readonly getProject: GetProjectUseCase,
     private readonly units: ManageProjectUnitsUseCase,
     private readonly comments: ProjectCommentsUseCase,
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
   ) {}
 
-  private isAdmin(request: RequestWithAuthorization): Promise<boolean> {
-    return this.tokens.isAdministrator(readBearerToken(request));
+  private async isAdmin(request: RequestWithAuthorization): Promise<boolean> {
+    const payload = await this.tokens.verify(readBearerToken(request));
+    if (payload?.role !== "ADMINISTRATOR") return false;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { role: true, isActive: true },
+    }) ?? await this.prisma.user.findUnique({
+      where: { email: payload.sub.trim().toLowerCase() },
+      select: { role: true, isActive: true },
+    });
+    if (user) return user.role === "ADMINISTRATOR" && user.isActive;
+
+    const adminEmail = this.config.get<string>("app.adminEmail", "admin@inti.local").toLowerCase();
+    return payload.sub.toLowerCase() === adminEmail;
   }
 
   // Las rutas fijas van antes que las dinámicas (:slug, :id) para que no se confundan.
@@ -50,35 +68,47 @@ export class ProjectsController {
   }
 
   @Get("admin/all")
-  @UseGuards(AdminGuard)
+  @UseGuards(SessionGuard, AdminGuard)
   listAll(@Query() filters: ListProjectsQuery) {
     return this.listProjects.execute(filters, true);
   }
 
+  @Get("mine")
+  @UseGuards(SessionGuard)
+  listMine(@Query() filters: ListProjectsQuery, @Req() request: AuthenticatedRequest) {
+    return this.listProjects.execute(filters, true, request.auth.id);
+  }
+
   @Get("admin/:id")
-  @UseGuards(AdminGuard)
+  @UseGuards(SessionGuard, AdminGuard)
   getForEdit(@Param("id") id: string) {
     return this.getProject.byId(id);
   }
 
+  @Get("mine/:id")
+  @UseGuards(SessionGuard)
+  getMineForEdit(@Param("id") id: string, @Req() request: AuthenticatedRequest) {
+    return this.getProject.byId(id, request.auth.id);
+  }
+
   @Patch("units/:unitId")
-  @UseGuards(AdminGuard)
-  updateUnit(@Param("unitId") unitId: string, @Body() changes: UpdateProjectUnitDto) {
-    return this.units.update(unitId, changes);
+  @UseGuards(SessionGuard)
+  updateUnit(@Param("unitId") unitId: string, @Body() changes: UpdateProjectUnitDto, @Req() request: AuthenticatedRequest) {
+    return this.units.update(unitId, changes, this.ownerId(request));
   }
 
   @Delete("units/:unitId")
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(AdminGuard)
-  removeUnit(@Param("unitId") unitId: string) {
-    return this.units.remove(unitId);
+  @UseGuards(SessionGuard)
+  removeUnit(@Param("unitId") unitId: string, @Req() request: AuthenticatedRequest) {
+    return this.units.remove(unitId, this.ownerId(request));
   }
 
   @Delete("comments/:commentId")
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(AdminGuard)
-  removeComment(@Param("commentId") commentId: string) {
-    return this.comments.remove(commentId);
+  @UseGuards(SessionGuard)
+  removeComment(@Param("commentId") commentId: string, @Req() request: AuthenticatedRequest) {
+    return this.comments.remove(commentId, this.ownerId(request));
   }
 
   @Get(":slug")
@@ -87,34 +117,34 @@ export class ProjectsController {
   }
 
   @Post()
-  @UseGuards(AdminGuard)
-  create(@Body() input: ProjectDto) {
-    return this.createProject.execute(input);
+  @UseGuards(SessionGuard)
+  create(@Body() input: ProjectDto, @Req() request: AuthenticatedRequest) {
+    return this.createProject.execute(input, request.auth.id);
   }
 
   @Put(":id")
-  @UseGuards(AdminGuard)
-  update(@Param("id") id: string, @Body() input: ProjectDto) {
-    return this.updateProject.execute(id, input);
+  @UseGuards(SessionGuard)
+  update(@Param("id") id: string, @Body() input: ProjectDto, @Req() request: AuthenticatedRequest) {
+    return this.updateProject.execute(id, input, this.ownerId(request));
   }
 
   @Patch(":id/status")
-  @UseGuards(AdminGuard)
-  setStatus(@Param("id") id: string, @Body() input: ChangeProjectStatusDto) {
-    return this.changeStatus.execute(id, input.status);
+  @UseGuards(SessionGuard)
+  setStatus(@Param("id") id: string, @Body() input: ChangeProjectStatusDto, @Req() request: AuthenticatedRequest) {
+    return this.changeStatus.execute(id, input.status, this.ownerId(request));
   }
 
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(AdminGuard)
-  remove(@Param("id") id: string, @Query() query: DeleteProjectQuery) {
-    return this.deleteProject.execute(id, query.force === "true");
+  @UseGuards(SessionGuard)
+  remove(@Param("id") id: string, @Query() query: DeleteProjectQuery, @Req() request: AuthenticatedRequest) {
+    return this.deleteProject.execute(id, query.force === "true", this.ownerId(request));
   }
 
   @Post(":id/units")
-  @UseGuards(AdminGuard)
-  addUnit(@Param("id") id: string, @Body() unit: ProjectUnitDto) {
-    return this.units.add(id, unit);
+  @UseGuards(SessionGuard)
+  addUnit(@Param("id") id: string, @Body() unit: ProjectUnitDto, @Req() request: AuthenticatedRequest) {
+    return this.units.add(id, unit, this.ownerId(request));
   }
 
   @Get(":id/comments")
@@ -128,5 +158,9 @@ export class ProjectsController {
       throw new HttpException("Estás comentando muy rápido. Espera un minuto e inténtalo de nuevo.", HttpStatus.TOO_MANY_REQUESTS);
     }
     return this.comments.add(id, input.authorName, input.content);
+  }
+
+  private ownerId(request: AuthenticatedRequest): string | undefined {
+    return request.auth.role === "ADMINISTRATOR" ? undefined : request.auth.id;
   }
 }

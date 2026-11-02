@@ -7,8 +7,36 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id           String       @id @default(cuid())
+  name         String
+  email        String       @unique
+  passwordHash String
+  role         String       @default("USER")
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  properties   Property[]
+  projects     Project[]
+  loginEvents  LoginEvent[]
+
+  @@index([role, createdAt])
+  @@map("users")
+}
+
+model LoginEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt, userId])
+  @@map("login_events")
+}
+
 model Property {
   id              String            @id @default(cuid())
+  ownerId         String?
   slug            String            @unique
   createdByRole   String
   operationType   String
@@ -30,8 +58,10 @@ model Property {
   details         PropertyDetails?
   amenities       PropertyAmenity[]
   media           PropertyMedia[]
+  owner           User?             @relation(fields: [ownerId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
+  @@index([ownerId, createdAt])
   @@index([operationType, propertyType])
   @@map("properties")
 }
@@ -40,16 +70,16 @@ model PropertyLocation {
   id                  String   @id @default(cuid())
   propertyId          String   @unique
   department          String
-  province             String
-  district             String
-  address              String
-  number               String?
-  sector               String?
-  reference            String?
-  latitude             Float?
-  longitude            Float?
-  approximateLocation  Boolean  @default(true)
-  property             Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  province            String
+  district            String
+  address             String
+  number              String?
+  sector              String?
+  reference           String?
+  latitude            Float?
+  longitude           Float?
+  approximateLocation Boolean  @default(true)
+  property            Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([department, province, district])
   @@map("property_locations")
@@ -84,13 +114,13 @@ model PropertyAmenity {
 }
 
 model PropertyMedia {
-  id        String   @id @default(cuid())
+  id         String   @id @default(cuid())
   propertyId String
-  url       String
-  publicId  String?
-  position  Int      @default(0)
-  isCover   Boolean  @default(false)
-  property  Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  url        String
+  publicId   String?
+  position   Int      @default(0)
+  isCover    Boolean  @default(false)
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([propertyId, position])
   @@map("property_media")
@@ -98,6 +128,7 @@ model PropertyMedia {
 
 model Project {
   id                   String            @id @default(cuid())
+  ownerId              String?
   slug                 String            @unique
   name                 String
   description          String
@@ -139,8 +170,10 @@ model Project {
   amenities            ProjectAmenity[]
   timeline             ProjectTimeline[]
   comments             ProjectComment[]
+  owner                User?             @relation(fields: [ownerId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
+  @@index([ownerId, createdAt])
   @@index([type, phase])
   @@index([department, province, district])
   @@map("projects")

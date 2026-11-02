@@ -6,8 +6,8 @@ import { ProjectNotFoundError } from "../domain/project.errors";
 export class ChangeProjectStatusUseCase {
   constructor(@Inject(PROJECT_REPOSITORY) private readonly projects: ProjectRepository) {}
 
-  async execute(id: string, status: ProjectStatus): Promise<Project> {
-    const project = await this.projects.setStatus(id, status);
+  async execute(id: string, status: ProjectStatus, ownerId?: string): Promise<Project> {
+    const project = await this.projects.setStatus(id, status, ownerId);
     if (!project) throw ProjectNotFoundError.project();
     return project;
   }

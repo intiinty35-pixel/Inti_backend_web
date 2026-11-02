@@ -165,6 +165,7 @@ export function toSummary(record: SummaryRecord): ProjectSummary {
   const cover = record.media.find((item) => item.isCover) ?? record.media[0];
   return {
     id: record.id,
+    ownerId: record.ownerId ?? undefined,
     slug: record.slug,
     name: record.name,
     description: record.description,

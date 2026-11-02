@@ -14,7 +14,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
-import { AdminGuard } from "../../auth/admin.guard";
+import { SessionGuard } from "../../auth/session.guard";
 import { ProjectFileStorage } from "../infrastructure/project-file-storage";
 
 const MAX_FILES = 12;
@@ -28,7 +28,7 @@ export class ProjectMediaController {
   ) {}
 
   @Post()
-  @UseGuards(AdminGuard)
+  @UseGuards(SessionGuard)
   @UseInterceptors(FilesInterceptor("files", MAX_FILES, { storage: memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } }))
   async upload(@UploadedFiles() uploads: Array<{ buffer: Buffer }> = []) {
     if (uploads.length === 0) throw new BadRequestException("Selecciona al menos una imagen.");

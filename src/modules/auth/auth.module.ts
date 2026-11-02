@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { AdminGuard } from "./admin.guard";
 import { AuthController } from "./auth.controller";
 import { AuthTokenService, TOKEN_ALGORITHM, TOKEN_TTL } from "./auth-token.service";
+import { SessionGuard } from "./session.guard";
 
 const MIN_SECRET_LENGTH = 32;
 
@@ -23,7 +24,7 @@ const MIN_SECRET_LENGTH = 32;
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthTokenService, AdminGuard],
-  exports: [AuthTokenService, AdminGuard],
+  providers: [AuthTokenService, AdminGuard, SessionGuard],
+  exports: [AuthTokenService, AdminGuard, SessionGuard],
 })
 export class AuthModule {}
