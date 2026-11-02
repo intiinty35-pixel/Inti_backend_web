@@ -5,4 +5,5 @@ export default registerAs("app", () => ({
   publicUrl: process.env.API_PUBLIC_URL ?? "http://localhost:3001",
   adminEmail: process.env.ADMIN_EMAIL ?? "admin@inti.local",
   adminPassword: process.env.ADMIN_PASSWORD ?? "",
+  authSecret: process.env.AUTH_SECRET ?? "",
 }));
