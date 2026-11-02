@@ -95,3 +95,125 @@ model PropertyMedia {
   @@index([propertyId, position])
   @@map("property_media")
 }
+
+model Project {
+  id                   String            @id @default(cuid())
+  slug                 String            @unique
+  name                 String
+  description          String
+  type                 String
+  phase                String
+  status               String            @default("DRAFT")
+  currency             String            @default("BOB")
+  floors               Int?
+  startDate            DateTime?
+  estimatedDelivery    DateTime?
+  constructionProgress Int               @default(0)
+  department           String
+  province             String
+  district             String
+  address              String
+  urbanization         String?
+  reference            String?
+  latitude             Float?
+  longitude            Float?
+  showExactAddress     Boolean           @default(true)
+  contactName          String?
+  contactEmail         String?
+  contactPhone         String?
+  contactWhatsapp      String?
+  websiteUrl           String?
+  ruc                  String?
+  socialReason         String?
+  initialFee           Float?
+  monthlyPayment       Float?
+  financingInfo        String?
+  totalBlocks          Int?
+  hasUrbanization      Boolean           @default(false)
+  hasPropertyTitle     Boolean           @default(false)
+  viewsCount           Int               @default(0)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  units                ProjectUnit[]
+  media                ProjectMedia[]
+  amenities            ProjectAmenity[]
+  timeline             ProjectTimeline[]
+  comments             ProjectComment[]
+
+  @@index([status, createdAt])
+  @@index([type, phase])
+  @@index([department, province, district])
+  @@map("projects")
+}
+
+model ProjectUnit {
+  id           String  @id @default(cuid())
+  projectId    String
+  unitNumber   String
+  type         String
+  floor        Int?
+  area         Float?
+  bedrooms     Int?
+  bathrooms    Int?
+  parkingSpots Int?
+  price        Float?
+  status       String  @default("AVAILABLE")
+  view         String?
+  block        String?
+  lotNumber    String?
+  frontWidth   Float?
+  position     Int     @default(0)
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, position])
+  @@map("project_units")
+}
+
+model ProjectMedia {
+  id        String  @id @default(cuid())
+  projectId String
+  url       String
+  publicId  String?
+  kind      String  @default("IMAGE")
+  position  Int     @default(0)
+  isCover   Boolean @default(false)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, position])
+  @@map("project_media")
+}
+
+model ProjectAmenity {
+  id        String  @id @default(cuid())
+  projectId String
+  name      String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("project_amenities")
+}
+
+model ProjectTimeline {
+  id          String   @id @default(cuid())
+  projectId   String
+  phase       String
+  date        DateTime
+  description String?
+  completed   Boolean  @default(false)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, date])
+  @@map("project_timeline")
+}
+
+model ProjectComment {
+  id         String   @id @default(cuid())
+  projectId  String
+  authorName String
+  content    String
+  createdAt  DateTime @default(now())
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@map("project_comments")
+}

@@ -11,25 +11,34 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "node --env-file=.env prisma/seed-demo.cjs"
+    "db:seed": "node --env-file=.env prisma/seed-demo.cjs",
+    "db:seed:projects": "node --env-file=.env prisma/seed-projects.cjs",
+    "test": "node --experimental-vm-modules --no-warnings node_modules/jest/bin/jest.js",
+    "test:e2e": "node --experimental-vm-modules --no-warnings node_modules/jest/bin/jest.js --config test/jest-e2e.config.cjs --runInBand"
   },
   "dependencies": {
     "@nestjs/common": "^12.3.2",
     "@nestjs/config": "^12.0.1",
     "@nestjs/core": "^12.3.2",
+    "@nestjs/jwt": "^12.0.3",
     "@nestjs/platform-express": "^12.3.2",
     "@prisma/client": "6.19.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "multer": "2.5.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.11",
     "@nestjs/schematics": "^12.0.12",
+    "@nestjs/testing": "^12.3.2",
+    "@types/jest": "^30.0.0",
     "@types/multer": "^2.3.0",
     "@types/node": "^24.19.2",
+    "jest": "^30.5.2",
     "prisma": "6.19.0",
+    "ts-jest": "^29.4.15",
     "typescript": "5.9.3"
   }
 }
