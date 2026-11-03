@@ -97,14 +97,14 @@ export class ProjectsController {
   }
 
   @Patch("units/:unitId")
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, MemberGuard)
   updateUnit(@Param("unitId") unitId: string, @Body() changes: UpdateProjectUnitDto, @Req() request: AuthenticatedRequest) {
     return this.units.update(unitId, changes, this.ownerId(request));
   }
 
   @Delete("units/:unitId")
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, MemberGuard)
   removeUnit(@Param("unitId") unitId: string, @Req() request: AuthenticatedRequest) {
     return this.units.remove(unitId, this.ownerId(request));
   }
@@ -134,13 +134,13 @@ export class ProjectsController {
   }
 
   @Put(":id")
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, MemberGuard)
   update(@Param("id") id: string, @Body() input: ProjectDto, @Req() request: AuthenticatedRequest) {
     return this.updateProject.execute(id, input, this.ownerId(request));
   }
 
   @Patch(":id/status")
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, MemberGuard)
   setStatus(@Param("id") id: string, @Body() input: ChangeProjectStatusDto, @Req() request: AuthenticatedRequest) {
     return this.changeStatus.execute(id, input.status, this.ownerId(request));
   }
@@ -153,7 +153,7 @@ export class ProjectsController {
   }
 
   @Post(":id/units")
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, MemberGuard)
   addUnit(@Param("id") id: string, @Body() unit: ProjectUnitDto, @Req() request: AuthenticatedRequest) {
     return this.units.add(id, unit, this.ownerId(request));
   }

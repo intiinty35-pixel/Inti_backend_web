@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEmail,
   IsIn,
   IsInt,
@@ -47,7 +48,7 @@ export class PropertyDetailsDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) parkingSpaces?: number;
   @IsOptional() @Type(() => Number) @IsInt() floor?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) floors?: number;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1800) constructionYear?: number;
+  @IsOptional() @IsDateString() constructionDate?: string;
   @IsOptional() @IsIn(CONSERVATION_STATUSES) conservationStatus?: ConservationStatus;
   @IsOptional() @IsObject() specificDetails?: Record<string, string | number | boolean>;
 }

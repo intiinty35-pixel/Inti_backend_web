@@ -96,7 +96,7 @@ model PropertyDetails {
   parkingSpaces      Int?
   floor              Int?
   floors             Int?
-  constructionYear   Int?
+  constructionDate   DateTime?
   conservationStatus String?
   specificDetails    String?
   property           Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)

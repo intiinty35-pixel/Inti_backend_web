@@ -35,7 +35,7 @@ const demoProperties = [
       halfBathrooms: 1,
       parkingSpaces: 2,
       floors: 2,
-      constructionYear: 2021,
+      constructionDate: new Date("2021-01-01T00:00:00.000Z"),
       conservationStatus: "EXCELLENT",
       specificDetails: { freeArea: 90, study: true, serviceRoom: true, condominium: false },
     },
@@ -77,7 +77,7 @@ const demoProperties = [
       parkingSpaces: 1,
       floor: 5,
       floors: 12,
-      constructionYear: 2020,
+      constructionDate: new Date("2020-01-01T00:00:00.000Z"),
       conservationStatus: "REMODELED",
       specificDetails: { livingRoom: true, diningRoom: true, laundry: true, elevators: 2, viewType: "Exterior" },
     },
@@ -154,7 +154,7 @@ const demoProperties = [
       parkingSpaces: 2,
       floor: 6,
       floors: 10,
-      constructionYear: 2023,
+      constructionDate: new Date("2023-01-01T00:00:00.000Z"),
       conservationStatus: "EXCELLENT",
       specificDetails: { terrace: true, elevator: true, security: true, storageRoom: true },
     },
@@ -175,7 +175,15 @@ async function main() {
     const ownerId = property.createdByRole === "USER" ? user?.id : agent?.id;
     await prisma.property.upsert({
       where: { slug: property.slug },
-      update: { ownerId, createdByRole: property.createdByRole },
+      update: {
+        ownerId,
+        createdByRole: property.createdByRole,
+        status: "PUBLISHED",
+        contactName: property.contactName,
+        contactEmail: property.contactEmail,
+        contactPhone: property.contactPhone,
+        contactWhatsapp: property.contactWhatsapp,
+      },
       create: {
         slug: property.slug,
         ownerId,

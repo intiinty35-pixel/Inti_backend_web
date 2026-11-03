@@ -66,13 +66,79 @@ export class PrismaPropertyRepository implements PropertyRepository {
             parkingSpaces: data.details.parkingSpaces,
             floor: data.details.floor,
             floors: data.details.floors,
-            constructionYear: data.details.constructionYear,
+            constructionDate: data.details.constructionDate ? new Date(data.details.constructionDate) : undefined,
             conservationStatus: data.details.conservationStatus,
             specificDetails: JSON.stringify(data.details.specificDetails ?? {}),
           },
         },
         amenities: { create: (data.amenityCodes ?? []).map((code) => ({ code })) },
         media: {
+          create: data.media.map((media, index) => ({
+            url: media.url,
+            publicId: media.publicId,
+            position: media.position ?? index,
+            isCover: media.isCover ?? index === 0,
+          })),
+        },
+      },
+      include: propertyInclude,
+    });
+
+    return this.toDomain(property);
+  }
+
+  async updateManaged(id: string, data: CreatePropertyData, ownerId?: string): Promise<Property | null> {
+    const existing = await this.prisma.property.findFirst({
+      where: { id, ...(ownerId ? { ownerId } : {}) },
+      select: { id: true },
+    });
+    if (!existing) return null;
+
+    const details = {
+      totalArea: data.details.totalArea ?? null,
+      constructedArea: data.details.constructedArea ?? null,
+      bedrooms: data.details.bedrooms ?? null,
+      bathrooms: data.details.bathrooms ?? null,
+      halfBathrooms: data.details.halfBathrooms ?? null,
+      parkingSpaces: data.details.parkingSpaces ?? null,
+      floor: data.details.floor ?? null,
+      floors: data.details.floors ?? null,
+      constructionDate: data.details.constructionDate ? new Date(data.details.constructionDate) : null,
+      conservationStatus: data.details.conservationStatus ?? null,
+      specificDetails: JSON.stringify(data.details.specificDetails ?? {}),
+    };
+    const location = {
+      ...data.location,
+      number: data.location.number ?? null,
+      sector: data.location.sector ?? null,
+      reference: data.location.reference ?? null,
+      latitude: data.location.latitude ?? null,
+      longitude: data.location.longitude ?? null,
+    };
+
+    const property = await this.prisma.property.update({
+      where: { id },
+      data: {
+        operationType: data.operationType,
+        propertyType: data.propertyType,
+        title: data.title,
+        description: data.description,
+        price: data.price,
+        currency: data.currency,
+        negotiable: data.negotiable ?? false,
+        maintenanceFee: data.maintenanceFee ?? null,
+        contactName: data.contactName ?? null,
+        contactEmail: data.contactEmail ?? null,
+        contactPhone: data.contactPhone ?? null,
+        contactWhatsapp: data.contactWhatsapp ?? null,
+        location: { upsert: { create: location, update: location } },
+        details: { upsert: { create: details, update: details } },
+        amenities: {
+          deleteMany: {},
+          create: (data.amenityCodes ?? []).map((code) => ({ code })),
+        },
+        media: {
+          deleteMany: {},
           create: data.media.map((media, index) => ({
             url: media.url,
             publicId: media.publicId,
@@ -159,7 +225,7 @@ export class PrismaPropertyRepository implements PropertyRepository {
         parkingSpaces: details?.parkingSpaces ?? undefined,
         floor: details?.floor ?? undefined,
         floors: details?.floors ?? undefined,
-        constructionYear: details?.constructionYear ?? undefined,
+        constructionDate: details?.constructionDate?.toISOString().slice(0, 10),
         conservationStatus: details?.conservationStatus as Property["details"]["conservationStatus"],
         specificDetails: parseSpecificDetails(details?.specificDetails),
       },

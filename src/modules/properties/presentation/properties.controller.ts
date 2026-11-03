@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
 import { PROFILE_ROLES, type ProfileRole } from "../../../shared/profile-role";
 import { AdminGuard } from "../../auth/admin.guard";
 import { MemberGuard } from "../../auth/member.guard";
@@ -6,6 +6,14 @@ import { AuthenticatedRequest, SessionGuard } from "../../auth/session.guard";
 import { CreatePropertyUseCase } from "../application/create-property.use-case";
 import { ListPropertiesUseCase } from "../application/list-properties.use-case";
 import { CreatePropertyDto } from "./create-property.dto";
+
+function normalizeBoliviaLongitude<T extends { latitude?: number; longitude?: number }>(location: T): T {
+  const { latitude, longitude } = location;
+  if (latitude != null && longitude != null && latitude >= -23 && latitude <= -9 && longitude >= 57 && longitude <= 70) {
+    return { ...location, longitude: -longitude };
+  }
+  return location;
+}
 
 @Controller("properties")
 export class PropertiesController {
@@ -37,9 +45,21 @@ export class PropertiesController {
   create(@Body() input: CreatePropertyDto, @Req() request: AuthenticatedRequest) {
     return this.createProperty.execute({
       ...input,
+      location: normalizeBoliviaLongitude(input.location),
       createdByRole: request.auth.role as ProfileRole,
       ownerId: request.auth.id,
     });
+  }
+
+  @Put(":id")
+  @UseGuards(SessionGuard, MemberGuard)
+  update(@Param("id") id: string, @Body() input: CreatePropertyDto, @Req() request: AuthenticatedRequest) {
+    return this.listProperties.updateManaged(id, {
+      ...input,
+      location: normalizeBoliviaLongitude(input.location),
+      createdByRole: request.auth.role as ProfileRole,
+      ownerId: request.auth.id,
+    }, request.auth.id);
   }
 
   @Delete(":id")

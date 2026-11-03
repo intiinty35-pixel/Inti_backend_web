@@ -27,7 +27,7 @@ export interface PropertyDetails {
   parkingSpaces?: number;
   floor?: number;
   floors?: number;
-  constructionYear?: number;
+  constructionDate?: string;
   conservationStatus?: ConservationStatus;
   specificDetails?: Record<string, string | number | boolean>;
 }
@@ -75,6 +75,7 @@ export const PROPERTY_REPOSITORY = Symbol("PROPERTY_REPOSITORY");
 
 export interface PropertyRepository {
   create(data: CreatePropertyData): Promise<Property>;
+  updateManaged(id: string, data: CreatePropertyData, ownerId?: string): Promise<Property | null>;
   findAll(): Promise<Property[]>;
   findManaged(ownerId?: string): Promise<Property[]>;
   deleteManaged(id: string, ownerId?: string): Promise<{ publicIds: string[] } | null>;
