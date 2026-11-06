@@ -1,0 +1,27 @@
+# Backend (NestJS) — despliegue independiente.
+# Escucha solo en 127.0.0.1:3101; el Nginx del servidor lo publica en https://intinmobiliaria.com/api/
+# (ver frontend/deploy/nginx). No guarda archivos: la base de datos es PostgreSQL externa y las imágenes van a Cloudinary,
+# por eso no hay volúmenes.
+
+name: inti-backend
+
+services:
+  backend:
+    build:
+      context: ..
+    container_name: inti_backend
+    restart: unless-stopped
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Variables reales del servidor (ver deploy/.env.production.example). Copiar a ../.env y proteger con chmod 600.
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      TRUST_PROXY_HOPS: 1   # un proxy (Nginx) delante: permite ver la IP real de cada visitante
+    ports:
+      - "127.0.0.1:3101:3001"
