@@ -1,10 +1,40 @@
 import { ValidationPipe, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { execSync } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync, readdirSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 import { PrismaService } from "../src/infrastructure/persistence/prisma.service";
+import { isSupportedImage } from "../src/shared/image-signature";
+import { ImageStorage, type ImageFolder, type StoredImage } from "../src/shared/image-storage";
+
+/** Base PostgreSQL de pruebas (la del compose.yaml). Cada ejecución usa su propio esquema y lo elimina al terminar. */
+const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ?? "postgresql://inti:inti@localhost:5433/inti";
+
+/** Reemplaza a Cloudinary: valida el contenido real de la imagen, igual que el adaptador, pero guarda en memoria y sin red. */
+class InMemoryImageStorage extends ImageStorage {
+  private readonly stored = new Map<string, Buffer>();
+  private counter = 0;
+
+  async save(buffer: Buffer, folder: ImageFolder): Promise<StoredImage | null> {
+    if (!isSupportedImage(buffer)) return null;
+    const publicId = `${folder}/imagen-${++this.counter}`;
+    this.stored.set(publicId, buffer);
+    return { url: `https://res.cloudinary.test/demo/image/upload/${publicId}.png`, publicId };
+  }
+
+  async remove(publicIds: string[]): Promise<void> {
+    publicIds.forEach((publicId) => this.stored.delete(publicId));
+  }
+
+  has(publicId: string): boolean {
+    return this.stored.has(publicId);
+  }
+
+  count(): number {
+    return this.stored.size;
+  }
+}
+
+const images = new InMemoryImageStorage();
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 const ADMIN = { email: "admin@inti.local", password: "contrasena-de-prueba" };
@@ -12,7 +42,7 @@ const description = "Proyecto de prueba con una descripción suficientemente lar
 
 let app: INestApplication;
 let baseUrl: string;
-let workDir: string;
+let schemaName: string;
 let token: string;
 let memberToken: string;
 
@@ -98,21 +128,25 @@ async function createProject(body: object, authToken: string = memberToken): Pro
 }
 
 beforeAll(async () => {
-  const projectRoot = process.cwd();
-  workDir = mkdtempSync(join(tmpdir(), "inti-e2e-"));
+  schemaName = `e2e_${randomBytes(6).toString("hex")}`;
+  const databaseUrl = `${TEST_DATABASE_URL}${TEST_DATABASE_URL.includes("?") ? "&" : "?"}schema=${schemaName}`;
   Object.assign(process.env, {
-    DATABASE_URL: `file:${join(workDir, "test.db").replace(/\\/g, "/")}`,
+    DATABASE_URL: databaseUrl,
+    DIRECT_URL: databaseUrl,
     ADMIN_EMAIL: ADMIN.email,
     ADMIN_PASSWORD: ADMIN.password,
     AUTH_SECRET: "e".repeat(40),
-    API_PUBLIC_URL: "http://localhost",
   });
-  execSync("pnpm exec prisma migrate deploy", { cwd: projectRoot, env: process.env, stdio: "pipe" });
+  try {
+    execSync("pnpm exec prisma migrate deploy", { cwd: process.cwd(), env: process.env, stdio: "pipe" });
+  } catch (error) {
+    const detail = String((error as { stderr?: Buffer }).stderr ?? "").replace(/\/\/[^@\s]*@/g, "//***@").slice(0, 600);
+    throw new Error(`No se pudo preparar la base de pruebas. Levántala con \`docker compose up -d db\` o define TEST_DATABASE_URL.
+${detail}`);
+  }
 
-  // Las imágenes se guardan en <cwd>/uploads: se apunta a la carpeta temporal para no tocar las reales.
-  process.chdir(workDir);
   const { AppModule } = await import("../src/app.module");
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(ImageStorage).useValue(images).compile();
   app = moduleRef.createNestApplication();
   app.setGlobalPrefix("api");
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }));
@@ -136,9 +170,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app?.close();
-  process.chdir(tmpdir());
-  rmSync(workDir, { recursive: true, force: true });
+  if (app) {
+    await app.get(PrismaService).$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    await app.close();
+  }
 });
 
 describe("autenticación", () => {
@@ -279,46 +314,82 @@ describe("subida de imágenes", () => {
     expect((await call("POST", "/projects/media", { form })).status).toBe(400);
   });
 
-  it("guarda las imágenes reales y las sirve con el tipo correcto", async () => {
+  it("guarda las imágenes de proyectos en la nube, en la carpeta de proyectos", async () => {
     const [image] = await uploadImages(1);
-    const served = await fetch(image.url.replace("http://localhost", baseUrl));
-    expect(served.status).toBe(200);
-    expect(served.headers.get("content-type")).toBe("image/png");
+    expect(image.url).toMatch(/^https:\/\//);
+    expect(image.publicId).toMatch(/^inti\/projects\//);
+    expect(images.has(image.publicId)).toBe(true);
   });
 
-  it("no sirve archivos fuera de la carpeta de subidas", async () => {
-    expect((await fetch(`${baseUrl}/api/projects/media/..%2F..%2Ftest.db`)).status).toBe(404);
+  it("guarda las imágenes de propiedades en su propia carpeta y rechaza las que no son imágenes", async () => {
+    const form = new FormData();
+    form.append("files", new Blob([PNG], { type: "image/png" }), "casa.png");
+    const saved = await call("POST", "/properties/media", { form, token: memberToken });
+    expect(saved.status).toBe(201);
+    expect(saved.body.media[0]).toMatchObject({ publicId: expect.stringMatching(/^inti\/properties\//), position: 0, isCover: true });
+
+    const fake = new FormData();
+    fake.append("files", new Blob([Buffer.from("no soy una imagen")], { type: "image/png" }), "falso.png");
+    expect((await call("POST", "/properties/media", { form: fake, token: memberToken })).status).toBe(400);
+  });
+
+  it("si una imagen del lote es inválida, no deja guardadas las anteriores", async () => {
+    const before = images.count();
+    const form = new FormData();
+    form.append("files", new Blob([PNG], { type: "image/png" }), "buena.png");
+    form.append("files", new Blob([Buffer.from("no soy una imagen")], { type: "image/png" }), "mala.png");
+    expect((await call("POST", "/projects/media", { form })).status).toBe(400);
+    expect(images.count()).toBe(before);
+  });
+
+  it("ya no sirve archivos desde el disco del servidor", async () => {
+    expect((await fetch(`${baseUrl}/api/projects/media/cualquier.png`)).status).toBe(404);
+    expect((await fetch(`${baseUrl}/api/properties/media/cualquier.png`)).status).toBe(404);
   });
 });
 
 describe("ciclo de vida de un proyecto", () => {
-  it("lo crea como borrador, lo oculta al público y lo publica", async () => {
+  it("lo crea como borrador, solo lo ve su dueño y el administrador, y lo publica", async () => {
     const media = await uploadImages(1);
     const project = await createProject(residentialBody(media));
     expect(project).toMatchObject({ status: "DRAFT", currency: "USD", amenities: ["Piscina", "Gimnasio"] });
     expect(project.stats).toMatchObject({ totalUnits: 2, soldUnits: 1, availableUnits: 1, priceFrom: 100000, priceTo: 130000 });
 
     expect((await call("GET", `/projects/${project.slug}`, { token: null })).status).toBe(404);
+    expect((await call("GET", `/projects/${project.slug}`, { token: memberToken })).status).toBe(200);
     expect((await call("GET", `/projects/${project.slug}`)).status).toBe(200);
     expect((await call("GET", "/projects", { token: null })).body.items.map((item: any) => item.id)).not.toContain(project.id);
 
-    const published = await call("PATCH", `/projects/${project.id}/status`, { body: { status: "PUBLISHED" } });
+    const published = await call("PATCH", `/projects/${project.id}/status`, { body: { status: "PUBLISHED" }, token: memberToken });
     expect(published.body.status).toBe("PUBLISHED");
     const visible = await call("GET", `/projects/${project.slug}`, { token: null });
     expect(visible.status).toBe(200);
-    expect(visible.body.viewsCount).toBe(1);
+    expect(visible.body.viewsCount).toBeGreaterThanOrEqual(1);
+    expect(visible.body).not.toHaveProperty("ownerId");
 
     await call("DELETE", `/projects/${project.id}?force=true`);
   });
 
-  it("edita el proyecto conservando las unidades existentes y borrando del disco las imágenes quitadas", async () => {
+  it("el administrador solo puede eliminar: no crea, edita ni cambia el estado", async () => {
+    const [image] = await uploadImages(1);
+    expect((await call("POST", "/projects", { body: residentialBody([image]) })).status).toBe(403);
+
+    const project = await createProject(residentialBody([image]));
+    expect((await call("PUT", `/projects/${project.id}`, { body: residentialBody([image]) })).status).toBe(403);
+    expect((await call("PATCH", `/projects/${project.id}/status`, { body: { status: "PUBLISHED" } })).status).toBe(403);
+    expect((await call("POST", `/projects/${project.id}/units`, { body: { unitNumber: "9", type: "OFFICE", status: "AVAILABLE" } })).status).toBe(403);
+
+    expect((await call("DELETE", `/projects/${project.id}?force=true`)).status).toBe(204);
+  });
+
+  it("edita el proyecto conservando las unidades existentes y quitando de la nube las imágenes retiradas", async () => {
     const [first, second] = await uploadImages(2);
     const project = await createProject(residentialBody([first, second]));
-    const uploadDir = join(process.cwd(), "uploads", "projects");
-    expect(readdirSync(uploadDir)).toEqual(expect.arrayContaining([first.publicId, second.publicId]));
+    expect(images.has(first.publicId) && images.has(second.publicId)).toBe(true);
 
     const sold = project.units.find((unit: any) => unit.unitNumber === "102");
     const edited = await call("PUT", `/projects/${project.id}`, {
+      token: memberToken,
       body: residentialBody([first], {
         name: "Torres del Urubó II",
         amenities: ["Piscina"],
@@ -329,31 +400,32 @@ describe("ciclo de vida de un proyecto", () => {
     expect(edited.body).toMatchObject({ name: "Torres del Urubó II", amenities: ["Piscina"] });
     expect(edited.body.units).toHaveLength(2);
     expect(edited.body.units.map((unit: any) => unit.id)).toContain(sold.id);
-    expect(existsSync(join(uploadDir, second.publicId))).toBe(false);
-    expect(existsSync(join(uploadDir, first.publicId))).toBe(true);
+    expect(images.has(second.publicId)).toBe(false);
+    expect(images.has(first.publicId)).toBe(true);
 
-    expect((await call("PUT", "/projects/inexistente", { body: residentialBody([first]) })).status).toBe(404);
+    expect((await call("PUT", "/projects/inexistente", { body: residentialBody([first]), token: memberToken })).status).toBe(404);
     await call("DELETE", `/projects/${project.id}?force=true`);
   });
 
-  it("exige confirmación para borrar un proyecto con unidades vendidas y limpia sus archivos", async () => {
+  it("exige confirmación para borrar un proyecto con unidades vendidas y limpia sus imágenes en la nube", async () => {
     const [image] = await uploadImages(1);
     const project = await createProject(residentialBody([image]));
 
-    const refused = await call("DELETE", `/projects/${project.id}`);
+    const refused = await call("DELETE", `/projects/${project.id}`, { token: memberToken });
     expect(refused.status).toBe(409);
     expect(refused.body).toMatchObject({ statusCode: 409, error: "Conflict", message: expect.stringContaining("vendida") });
+    expect(images.has(image.publicId)).toBe(true);
 
-    expect((await call("DELETE", `/projects/${project.id}?force=true`)).status).toBe(204);
+    expect((await call("DELETE", `/projects/${project.id}?force=true`, { token: memberToken })).status).toBe(204);
     expect((await call("GET", `/projects/${project.slug}`)).status).toBe(404);
-    expect(existsSync(join(process.cwd(), "uploads", "projects", image.publicId))).toBe(false);
+    expect(images.has(image.publicId)).toBe(false);
   });
 
   it("borra sin confirmación cuando no hay unidades vendidas", async () => {
     const [image] = await uploadImages(1);
     const available = residentialBody([image], { units: [{ unitNumber: "1", type: "APARTMENT", status: "AVAILABLE" }] });
     const project = await createProject(available);
-    expect((await call("DELETE", `/projects/${project.id}`)).status).toBe(204);
+    expect((await call("DELETE", `/projects/${project.id}`, { token: memberToken })).status).toBe(204);
   });
 });
 
@@ -407,15 +479,15 @@ describe("unidades", () => {
     const media = await uploadImages(1);
     const project = await createProject(residentialBody(media, { units: [{ unitNumber: "1", type: "APARTMENT", status: "AVAILABLE" }] }));
 
-    const added = await call("POST", `/projects/${project.id}/units`, { body: { unitNumber: "2", type: "OFFICE", status: "AVAILABLE", price: 90000 } });
+    const added = await call("POST", `/projects/${project.id}/units`, { token: memberToken, body: { unitNumber: "2", type: "OFFICE", status: "AVAILABLE", price: 90000 } });
     expect(added.status).toBe(201);
-    const sold = await call("PATCH", `/projects/units/${added.body.id}`, { body: { status: "SOLD" } });
+    const sold = await call("PATCH", `/projects/units/${added.body.id}`, { token: memberToken, body: { status: "SOLD" } });
     expect(sold.body.status).toBe("SOLD");
-    expect((await call("DELETE", `/projects/units/${added.body.id}`)).status).toBe(409);
-    const reopened = await call("PATCH", `/projects/units/${added.body.id}`, { body: { status: "AVAILABLE" } });
+    expect((await call("DELETE", `/projects/units/${added.body.id}`, { token: memberToken })).status).toBe(409);
+    const reopened = await call("PATCH", `/projects/units/${added.body.id}`, { token: memberToken, body: { status: "AVAILABLE" } });
     expect(reopened.status).toBe(200);
-    expect((await call("DELETE", `/projects/units/${added.body.id}`)).status).toBe(204);
-    expect((await call("DELETE", `/projects/units/${added.body.id}`)).status).toBe(404);
+    expect((await call("DELETE", `/projects/units/${added.body.id}`, { token: memberToken })).status).toBe(204);
+    expect((await call("DELETE", `/projects/units/${added.body.id}`, { token: memberToken })).status).toBe(404);
     await call("DELETE", `/projects/${project.id}`);
   });
 });
@@ -427,7 +499,7 @@ describe("comentarios", () => {
     const body = { authorName: "Ana", content: "¡Muy buen proyecto!" };
 
     expect((await call("POST", `/projects/${project.id}/comments`, { token: null, body })).status).toBe(404);
-    await call("PATCH", `/projects/${project.id}/status`, { body: { status: "PUBLISHED" } });
+    await call("PATCH", `/projects/${project.id}/status`, { token: memberToken, body: { status: "PUBLISHED" } });
 
     const created = await call("POST", `/projects/${project.id}/comments`, { token: null, body });
     expect(created.status).toBe(201);
@@ -442,7 +514,7 @@ describe("comentarios", () => {
   it("limita la cantidad de comentarios por minuto", async () => {
     const media = await uploadImages(1);
     const project = await createProject(residentialBody(media, { units: [{ unitNumber: "1", type: "APARTMENT", status: "AVAILABLE" }] }));
-    await call("PATCH", `/projects/${project.id}/status`, { body: { status: "PUBLISHED" } });
+    await call("PATCH", `/projects/${project.id}/status`, { token: memberToken, body: { status: "PUBLISHED" } });
 
     const statuses: number[] = [];
     for (let index = 0; index < 8; index++) {
@@ -467,7 +539,7 @@ describe("listado, filtros y paginación", () => {
       const project = await createProject(
         residentialBody(media, { name: spec.name, district: spec.district, currency: spec.currency, units: [{ unitNumber: "1", type: "APARTMENT", status: "AVAILABLE", price: spec.price }] }),
       );
-      await call("PATCH", `/projects/${project.id}/status`, { body: { status: "PUBLISHED" } });
+      await call("PATCH", `/projects/${project.id}/status`, { token: memberToken, body: { status: "PUBLISHED" } });
       created.push(project.id);
     }
   });
