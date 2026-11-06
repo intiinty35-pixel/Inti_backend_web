@@ -4,8 +4,5 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.production.example
 *.tsbuildinfo
-uploads/*
-!uploads/.gitkeep
-prisma/dev.db
-prisma/dev.db-journal

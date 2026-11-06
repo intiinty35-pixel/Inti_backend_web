@@ -1,0 +1,27 @@
+# OPCIONAL: base PostgreSQL local con Docker para desarrollo y pruebas e2e (`docker compose up -d db`).
+# Es una alternativa a instalar PostgreSQL en el equipo o usar una base remota; consume memoria, así que no es obligatorio.
+# En producción no se usa; el despliegue está en deploy/docker-compose.yml.
+name: inti-dev
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: inti_dev_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: inti
+      POSTGRES_PASSWORD: inti
+      POSTGRES_DB: inti
+    # 5433 en el equipo para no chocar con un PostgreSQL instalado en el puerto habitual.
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - dev_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inti -d inti"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  dev_db:
