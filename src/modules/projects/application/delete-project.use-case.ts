@@ -1,13 +1,13 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PROJECT_REPOSITORY, type ProjectRepository } from "../domain/project";
 import { ProjectConflictError, ProjectNotFoundError } from "../domain/project.errors";
-import { ProjectFileStorage } from "../infrastructure/project-file-storage";
+import { ImageStorage } from "../../../shared/image-storage";
 
 @Injectable()
 export class DeleteProjectUseCase {
   constructor(
     @Inject(PROJECT_REPOSITORY) private readonly projects: ProjectRepository,
-    private readonly files: ProjectFileStorage,
+    private readonly images: ImageStorage,
   ) {}
 
   /** Un proyecto con unidades vendidas solo se elimina con confirmación explícita (`force`). */
@@ -18,6 +18,6 @@ export class DeleteProjectUseCase {
       throw new ProjectConflictError(`El proyecto tiene ${project.stats.soldUnits} unidad(es) vendida(s). Confirma la eliminación para borrarlo de todos modos.`);
     }
     const removed = ownerId ? await this.projects.delete(id, ownerId) : await this.projects.delete(id);
-    if (removed) await this.files.remove(removed.publicIds);
+    if (removed) await this.images.remove(removed.publicIds);
   }
 }

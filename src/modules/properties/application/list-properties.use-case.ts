@@ -1,12 +1,12 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { PROPERTY_REPOSITORY, type CreatePropertyData, type Property, type PropertyRepository } from "../domain/property";
-import { PropertyFileStorage } from "../infrastructure/property-file-storage";
+import { ImageStorage } from "../../../shared/image-storage";
 
 @Injectable()
 export class ListPropertiesUseCase {
   constructor(
     @Inject(PROPERTY_REPOSITORY) private readonly properties: PropertyRepository,
-    private readonly files: PropertyFileStorage,
+    private readonly images: ImageStorage,
   ) {}
 
   execute(): Promise<Property[]> {
@@ -28,13 +28,13 @@ export class ListPropertiesUseCase {
     const removedPublicIds = existing.media.flatMap((media) =>
       media.publicId && !retainedPublicIds.has(media.publicId) ? [media.publicId] : [],
     );
-    await this.files.remove(removedPublicIds);
+    await this.images.remove(removedPublicIds);
     return updated;
   }
 
   async deleteManaged(id: string, ownerId?: string): Promise<void> {
     const removed = await this.properties.deleteManaged(id, ownerId);
     if (!removed) throw new NotFoundException("No se encontró la propiedad.");
-    await this.files.remove(removed.publicIds);
+    await this.images.remove(removed.publicIds);
   }
 }

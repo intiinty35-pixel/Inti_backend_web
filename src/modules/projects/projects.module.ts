@@ -10,7 +10,6 @@ import { ProjectCommentsUseCase } from "./application/project-comments.use-case"
 import { UpdateProjectUseCase } from "./application/update-project.use-case";
 import { PROJECT_REPOSITORY } from "./domain/project";
 import { PrismaProjectRepository } from "./infrastructure/prisma-project.repository";
-import { ProjectFileStorage } from "./infrastructure/project-file-storage";
 import { ProjectMediaController } from "./presentation/project-media.controller";
 import { ProjectsController } from "./presentation/projects.controller";
 
@@ -26,7 +25,6 @@ import { ProjectsController } from "./presentation/projects.controller";
     GetProjectUseCase,
     ManageProjectUnitsUseCase,
     ProjectCommentsUseCase,
-    ProjectFileStorage,
     PrismaProjectRepository,
     { provide: PROJECT_REPOSITORY, useExisting: PrismaProjectRepository },
   ],

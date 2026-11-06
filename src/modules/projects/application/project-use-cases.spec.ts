@@ -1,6 +1,6 @@
 import type { Project, ProjectRepository, ProjectStatus, ProjectUnit } from "../domain/project";
 import { ProjectConflictError, ProjectNotFoundError, ProjectValidationError } from "../domain/project.errors";
-import type { ProjectFileStorage } from "../infrastructure/project-file-storage";
+import type { ImageStorage } from "../../../shared/image-storage";
 import { DeleteProjectUseCase } from "./delete-project.use-case";
 import { GetProjectUseCase } from "./get-project.use-case";
 import { ListProjectsUseCase } from "./list-projects.use-case";
@@ -32,7 +32,7 @@ function fakeRepository(): jest.Mocked<ProjectRepository> {
   };
 }
 
-const fakeFiles = () => ({ remove: jest.fn().mockResolvedValue(undefined) }) as unknown as jest.Mocked<ProjectFileStorage>;
+const fakeFiles = () => ({ save: jest.fn(), remove: jest.fn().mockResolvedValue(undefined) }) as unknown as jest.Mocked<ImageStorage>;
 
 describe("DeleteProjectUseCase", () => {
   it("falla si el proyecto no existe", async () => {
