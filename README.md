@@ -65,19 +65,19 @@ Las pruebas e2e usan un esquema propio y aleatorio dentro de una base PostgreSQL
 
 ## Despliegue
 
-Pensado para un servidor con Docker y Nginx, igual que el resto de proyectos. El sitio completo vive en un solo dominio: `https://intinmobiliaria.com/` (frontend) y `https://intinmobiliaria.com/api/` (esta API). El contenedor no guarda archivos: la base es PostgreSQL externa y las imágenes van a Cloudinary, por eso no usa volúmenes.
+Pensado para un servidor con Docker y Nginx. El sitio completo vive en un solo dominio: `https://intinmobiliaria.com/` (frontend) y `https://intinmobiliaria.com/api/` (esta API). **La base de datos PostgreSQL corre en el mismo servidor**, en un contenedor sin puertos públicos y con un volumen persistente; las imágenes van a Cloudinary, no al disco del servidor.
 
 Primer despliegue, en el servidor:
 
 ```bash
-git clone <repositorio> Inti_backend_web && cd Inti_backend_web
-cp deploy/.env.production.example .env && chmod 600 .env
-nano .env                    # completa los valores (base de datos, AUTH_SECRET, ADMIN_*, FRONTEND_ORIGIN, Cloudinary)
+git clone https://github.com/intiinty35-pixel/Inti_backend_web.git && cd Inti_backend_web
+sh deploy/init-env.sh        # crea .env y genera la contraseña de la base, las URLs y AUTH_SECRET
+nano .env                    # completa ADMIN_EMAIL, ADMIN_PASSWORD y las credenciales de Cloudinary
 sh deploy/deploy.sh
 ```
 
-Cada actualización posterior es solo `sh deploy/deploy.sh`: trae el código, reconstruye la imagen, reinicia el contenedor, **aplica las migraciones pendientes al arrancar** y espera a que `/api/health` responda. Si algo falta o falla, el script se detiene y muestra los registros.
+Cada actualización posterior es solo `sh deploy/deploy.sh`: trae el código, reconstruye la imagen, reinicia los contenedores, **aplica las migraciones pendientes al arrancar** y espera a que `/api/health` responda. Si algo falta o falla, el script se detiene y muestra los registros.
 
-- El contenedor escucha solo en `127.0.0.1:3101`; Nginx lo publica en `/api/`. La configuración de Nginx del dominio está en `Inti_frontend_web/deploy/nginx/intinmobiliaria.com.conf`.
-- Para cargar datos de demostración en el servidor: `docker compose -f deploy/docker-compose.yml exec backend node prisma/seed-projects.cjs`.
-- Para ver los registros: `docker compose -f deploy/docker-compose.yml logs -f backend`.
+- La API escucha solo en `127.0.0.1:3101`; Nginx la publica en `/api/`. La configuración de Nginx está en `Inti_frontend_web/deploy/nginx/intinmobiliaria.com.conf`.
+- **Respaldos:** `sh deploy/backup-db.sh` guarda un volcado comprimido y conserva los 14 más recientes; la guía explica cómo programarlo y cómo restaurar.
+- Guía completa, con HTTPS, verificación y problemas comunes: `deploy/DESPLIEGUE.md`.
