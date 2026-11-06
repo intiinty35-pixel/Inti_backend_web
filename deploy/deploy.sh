@@ -1,20 +1,18 @@
 #!/usr/bin/env sh
-# Despliegue y actualización del backend:  sh deploy/deploy.sh
+# Despliegue y actualización del backend y su base de datos:  sh deploy/deploy.sh
 # Sirve igual para el primer despliegue y para cada actualización.
 set -e
 cd "$(dirname "$0")"
 
 CONTAINER=inti_backend
 
-if [ ! -f ../.env ]; then
-  echo "Falta ../.env. Copia deploy/.env.production.example a .env, completa los valores y protégelo con chmod 600." >&2
-  exit 1
-fi
-
 echo "→ Actualizando el código..."
 git pull --ff-only
 
-echo "→ Construyendo e iniciando el contenedor..."
+# Crea o completa el .env (claves y URLs de la base de datos). Se detiene si falta algo que debes escribir tú.
+sh ./init-env.sh
+
+echo "→ Construyendo e iniciando los contenedores (base de datos y API)..."
 docker compose up -d --build
 
 # Al arrancar, la API aplica las migraciones pendientes y valida la configuración; si algo falta, el contenedor se detiene.
