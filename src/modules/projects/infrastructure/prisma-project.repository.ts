@@ -40,14 +40,14 @@ function buildWhere(filters: ProjectFilters, includeUnpublished: boolean, ownerI
   if (filters.location) {
     and.push({
       OR: [
-        { district: { contains: filters.location } },
-        { province: { contains: filters.location } },
-        { department: { contains: filters.location } },
-        { address: { contains: filters.location } },
+        { district: { contains: filters.location, mode: "insensitive" } },
+        { province: { contains: filters.location, mode: "insensitive" } },
+        { department: { contains: filters.location, mode: "insensitive" } },
+        { address: { contains: filters.location, mode: "insensitive" } },
       ],
     });
   }
-  if (filters.search) and.push({ OR: [{ name: { contains: filters.search } }, { description: { contains: filters.search } }] });
+  if (filters.search) and.push({ OR: [{ name: { contains: filters.search, mode: "insensitive" } }, { description: { contains: filters.search, mode: "insensitive" } }] });
   if (filters.priceMin != null || filters.priceMax != null) {
     and.push({
       units: {
