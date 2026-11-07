@@ -7,6 +7,7 @@ import { StorageModule } from "./infrastructure/storage/storage.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { HealthModule } from "./modules/health/health.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
+import { InquiriesModule } from "./modules/inquiries/inquiries.module";
 import { ProfilesModule } from "./modules/profiles/profiles.module";
 import { PropertiesModule } from "./modules/properties/properties.module";
 import { ProjectsModule } from "./modules/projects/projects.module";
@@ -24,6 +25,7 @@ import { UsersModule } from "./modules/users/users.module";
     AuthModule,
     HealthModule,
     DashboardModule,
+    InquiriesModule,
     ProfilesModule,
     UsersModule,
     PropertiesModule,

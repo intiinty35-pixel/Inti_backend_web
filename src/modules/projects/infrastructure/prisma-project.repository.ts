@@ -64,6 +64,8 @@ function buildWhere(filters: ProjectFilters, includeUnpublished: boolean, ownerI
   return {
     ...(ownerId ? { ownerId } : {}),
     ...(includeUnpublished ? {} : { status: "PUBLISHED" }),
+    ...(includeUnpublished && filters.status ? { status: filters.status } : {}),
+    ...(includeUnpublished && filters.ownerRole ? { owner: { role: filters.ownerRole } } : {}),
     ...(filters.type ? { type: filters.type } : {}),
     ...(filters.phase ? { phase: filters.phase } : {}),
     ...(filters.currency ? { currency: filters.currency } : {}),
@@ -146,7 +148,7 @@ export class PrismaProjectRepository implements ProjectRepository {
   }
 
   async setStatus(id: string, status: ProjectStatus, ownerId?: string): Promise<Project | null> {
-    const { count } = await this.prisma.project.updateMany({ where: { id, ...(ownerId ? { ownerId } : {}) }, data: { status } });
+    const { count } = await this.prisma.project.updateMany({ where: { id, ...(ownerId ? { ownerId } : {}), ...(status === "PUBLISHED" ? { status: "DRAFT" } : {}) }, data: { status } });
     if (!count) return null;
 
     const record = await this.prisma.project.findUnique({ where: { id }, include: projectInclude });

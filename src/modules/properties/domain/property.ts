@@ -4,6 +4,7 @@ export type OperationType = "SALE" | "RENT" | "TEMPORARY_RENT" | "TRANSFER";
 export type PropertyType = "APARTMENT" | "HOUSE" | "LAND" | "OFFICE" | "COMMERCIAL" | "ROOM" | "WAREHOUSE" | "PARKING";
 export type Currency = "BOB" | "USD";
 export type ConservationStatus = "NEW" | "EXCELLENT" | "GOOD" | "REMODELED" | "TO_REMODEL" | "UNDER_CONSTRUCTION";
+export type PropertyStatus = "DRAFT" | "PUBLISHED" | "PAUSED";
 
 export interface PropertyLocation {
   department: string;
@@ -66,7 +67,7 @@ export interface Property extends Omit<CreatePropertyData, "createdByRole"> {
   createdByRole: ProfileRole;
   ownerName?: string;
   ownerEmail?: string;
-  status: string;
+  status: PropertyStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -76,6 +77,7 @@ export const PROPERTY_REPOSITORY = Symbol("PROPERTY_REPOSITORY");
 export interface PropertyRepository {
   create(data: CreatePropertyData): Promise<Property>;
   updateManaged(id: string, data: CreatePropertyData, ownerId?: string): Promise<Property | null>;
+  setStatusManaged(id: string, status: PropertyStatus): Promise<Property | null>;
   findAll(): Promise<Property[]>;
   findManaged(ownerId?: string): Promise<Property[]>;
   deleteManaged(id: string, ownerId?: string): Promise<{ publicIds: string[] } | null>;

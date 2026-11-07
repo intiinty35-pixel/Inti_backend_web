@@ -254,3 +254,21 @@ model ProjectComment {
   @@index([projectId, createdAt])
   @@map("project_comments")
 }
+
+model Inquiry {
+  id          String    @id @default(cuid())
+  listingType String
+  listingId   String
+  ownerId     String?
+  senderName  String
+  senderEmail String
+  senderPhone String
+  message     String
+  status      String    @default("NEW")
+  createdAt   DateTime  @default(now())
+  readAt      DateTime?
+
+  @@index([ownerId, createdAt])
+  @@index([listingType, listingId, createdAt])
+  @@map("inquiries")
+}

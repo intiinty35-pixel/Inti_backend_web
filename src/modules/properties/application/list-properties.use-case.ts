@@ -37,4 +37,10 @@ export class ListPropertiesUseCase {
     if (!removed) throw new NotFoundException("No se encontró la propiedad.");
     await this.images.remove(removed.publicIds);
   }
+
+  async publishManaged(id: string): Promise<Property> {
+    const published = await this.properties.setStatusManaged(id, "PUBLISHED");
+    if (!published) throw new NotFoundException("No se encontró la publicación.");
+    return published;
+  }
 }

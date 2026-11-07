@@ -15,7 +15,21 @@ async function bootstrap(): Promise<void> {
   // La API no sirve HTML, así que la política de contenido no aporta nada.
   app.use(helmet({ contentSecurityPolicy: false }));
   app.setGlobalPrefix("api");
-  app.enableCors({ origin: config.get<string[]>("app.allowedOrigins", ["http://localhost:3000"]) });
+  const allowedOrigins = new Set(config.get<string[]>("app.allowedOrigins", ["http://localhost:3000"]));
+  app.enableCors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      if (process.env.NODE_ENV !== "production") {
+        try {
+          const hostname = new URL(origin).hostname;
+          if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]") return callback(null, true);
+        } catch {
+          return callback(null, false);
+        }
+      }
+      return callback(null, false);
+    },
+  });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }));
   // Permite que Docker detenga el contenedor cerrando la conexión a la base de datos.
   app.enableShutdownHooks();

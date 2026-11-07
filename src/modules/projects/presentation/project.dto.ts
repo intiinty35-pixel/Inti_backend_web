@@ -143,6 +143,8 @@ export class ListProjectsQuery implements ProjectFilters {
   @IsOptional() @IsIn(PROJECT_CURRENCIES) currency?: ProjectCurrency;
   @IsOptional() @IsString() @MaxLength(100) location?: string;
   @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
+  @IsOptional() @IsIn(["AGENT", "USER"]) ownerRole?: "AGENT" | "USER";
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) priceMin?: number;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) priceMax?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;

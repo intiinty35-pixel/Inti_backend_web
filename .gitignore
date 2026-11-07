@@ -6,3 +6,6 @@ coverage/
 !.env.example
 !.env.production.example
 *.tsbuildinfo
+
+# La documentación del proyecto sí se mantiene en Git.
+!README.md

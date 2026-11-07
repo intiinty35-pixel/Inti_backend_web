@@ -54,6 +54,47 @@ Datos de demostración (todos repetibles, no duplican):
 
 Al bajar cambios del repositorio, ejecuta `pnpm install`, `pnpm db:generate` y `pnpm db:deploy`.
 
+### Ejecutar el backend en Docker desde Ubuntu (WSL)
+
+Este flujo levanta **solo la API** en un contenedor Docker y usa la base de datos configurada en `.env`; no inicia un PostgreSQL local. Requiere Docker Desktop abierto y la integración WSL habilitada para Ubuntu. El `.env` no se sube a Git ni se copia dentro de la imagen: Docker lo lee al crear el contenedor.
+
+En Ubuntu/WSL, desde la raíz del backend:
+
+```bash
+cd /mnt/c/Fronted/Empresa/Int/inti_backend
+docker build -t inti-backend-dev .
+docker rm -f inti-backend-dev 2>/dev/null || true
+docker run -d --name inti-backend-dev --restart unless-stopped \
+  --env-file .env \
+  -e API_PORT=3001 \
+  -e FRONTEND_ORIGIN=http://localhost:3000 \
+  -p 127.0.0.1:3001:3001 \
+  inti-backend-dev
+docker logs -f inti-backend-dev
+```
+
+La imagen ejecuta `prisma migrate deploy` antes de iniciar la API. Comprueba el servicio en otra terminal WSL:
+
+```bash
+curl http://localhost:3001/api/health
+docker ps --filter name=inti-backend-dev
+```
+
+Para ver los registros sin seguirlos, usa `docker logs --tail=100 inti-backend-dev`. Para detener o volver a iniciar el mismo contenedor, usa `docker stop inti-backend-dev` y `docker start inti-backend-dev`.
+
+#### Cuando cambia `prisma/schema.prisma`
+
+Primero, desde PowerShell en el backend, crea y aplica una migración a la base de desarrollo configurada en `.env`:
+
+```powershell
+cd C:\Fronted\Empresa\Int\inti_backend
+pnpm exec prisma migrate dev --name nombre_del_cambio
+```
+
+Después, en Ubuntu/WSL, reconstruye y reemplaza el contenedor con los comandos anteriores. Al arrancar, este aplica las migraciones versionadas con `prisma migrate deploy`. No uses `migrate reset` ni ejecutes `migrate dev` en producción.
+
+> Si `docker run` dice que el puerto 3001 está ocupado, identifica y detén el proceso/contenedor que lo usa antes de repetirlo; no cambies el puerto a ciegas porque el frontend local debe apuntar a `http://localhost:3001/api`.
+
 ### Pruebas
 
 ```bash
