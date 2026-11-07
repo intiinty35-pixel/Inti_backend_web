@@ -4,5 +4,6 @@ module.exports = {
   testRegex: "test/.*\.e2e-spec\.ts$",
   testEnvironment: "node",
   testTimeout: 60000,
+  setupFiles: ["<rootDir>/test/e2e-env.cjs"],
   transform: { "^.+\.ts$": ["ts-jest", { tsconfig: "<rootDir>/tsconfig.spec.json" }] },
 };

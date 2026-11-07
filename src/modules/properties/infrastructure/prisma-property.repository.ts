@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../../../infrastructure/persistence/prisma.service";
-import type { CreatePropertyData, Property, PropertyRepository } from "../domain/property";
+import type { CreatePropertyData, Property, PropertyRepository, PropertyStatus } from "../domain/property";
 
 const propertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
   owner: { select: { name: true, email: true } },
@@ -41,6 +41,7 @@ export class PrismaPropertyRepository implements PropertyRepository {
     const property = await this.prisma.property.create({
       data: {
         ownerId: data.ownerId,
+        status: "DRAFT",
         slug: `${slugBase}-${randomUUID().slice(0, 8)}`,
         createdByRole: data.createdByRole,
         operationType: data.operationType,
@@ -153,6 +154,13 @@ export class PrismaPropertyRepository implements PropertyRepository {
     return this.toDomain(property);
   }
 
+  async setStatusManaged(id: string, status: PropertyStatus): Promise<Property | null> {
+    const { count } = await this.prisma.property.updateMany({ where: { id, status: "DRAFT" }, data: { status } });
+    if (!count) return null;
+    const property = await this.prisma.property.findUnique({ where: { id }, include: propertyInclude });
+    return property ? this.toDomain(property) : null;
+  }
+
   async findAll(): Promise<Property[]> {
     const properties = await this.prisma.property.findMany({
       where: { status: "PUBLISHED" },
@@ -236,7 +244,7 @@ export class PrismaPropertyRepository implements PropertyRepository {
         position: item.position,
         isCover: item.isCover,
       })),
-      status: record.status,
+      status: record.status as PropertyStatus,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     };

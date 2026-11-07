@@ -4,8 +4,8 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.production.example
 *.tsbuildinfo
-uploads/*
-!uploads/.gitkeep
-prisma/dev.db
-prisma/dev.db-journal
+
+# La documentación del proyecto sí se mantiene en Git.
+!README.md

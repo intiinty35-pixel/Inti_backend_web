@@ -1,38 +1,43 @@
-# syntax=docker/dockerfile:1
-
-
-
-
-
-FROM node:22-slim AS deps
+# ---- Base: Node 22 + pnpm (la versión sale del campo packageManager de package.json) ----
+FROM node:22-alpine AS base
+# openssl lo necesita el motor de Prisma en Alpine.
+RUN apk add --no-cache openssl libc6-compat
+RUN corepack enable
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
 
-FROM deps AS build
-COPY . .
-RUN npx prisma generate && npm run build
+# ---- Etapa 1: dependencias y compilación ----
+FROM base AS builder
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
+# El cliente de Prisma se genera con el esquema; no necesita conectarse a la base.
+COPY prisma ./prisma
+RUN pnpm exec prisma generate
 
-FROM node:22-slim AS production
+COPY tsconfig.json tsconfig.build.json nest-cli.json ./
+COPY src ./src
+RUN pnpm build
+
+# Deja solo las dependencias de producción (Prisma incluido, para aplicar migraciones al arrancar).
+RUN pnpm prune --prod
+
+# ---- Etapa 2: imagen final ----
+FROM node:22-alpine AS runner
+RUN apk add --no-cache openssl libc6-compat
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/package.json /app/
-COPY --from=build /app/package-lock.json /app/
+ENV API_PORT=3001
 
-
-
-RUN npm install --no-save --no-package-lock prisma@6.19.0
-RUN npm install --omit=dev --no-audit --no-fund --no-package-lock
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules/.prisma/client ./node_modules/.prisma/client
-COPY --from=build /app/prisma ./prisma
-
-
-RUN mkdir -p /app/data && chown -R node:node /app/data
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/prisma ./prisma
+COPY --from=builder --chown=node:node /app/package.json ./
 
 USER node
+EXPOSE 3001
 
-ENV DATABASE_URL=file:/app/data/dev.db
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3001/api/health >/dev/null || exit 1
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# Aplica las migraciones pendientes y luego inicia la API. Las imágenes no se guardan aquí: van a Cloudinary.
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && exec node dist/main.js"]

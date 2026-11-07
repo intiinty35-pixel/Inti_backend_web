@@ -1,0 +1,3 @@
+# Los scripts y el Dockerfile se ejecutan en Linux: deben conservar saltos de línea LF.
+*.sh text eol=lf
+Dockerfile text eol=lf

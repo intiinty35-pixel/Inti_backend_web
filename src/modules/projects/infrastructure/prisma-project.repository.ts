@@ -40,14 +40,14 @@ function buildWhere(filters: ProjectFilters, includeUnpublished: boolean, ownerI
   if (filters.location) {
     and.push({
       OR: [
-        { district: { contains: filters.location } },
-        { province: { contains: filters.location } },
-        { department: { contains: filters.location } },
-        { address: { contains: filters.location } },
+        { district: { contains: filters.location, mode: "insensitive" } },
+        { province: { contains: filters.location, mode: "insensitive" } },
+        { department: { contains: filters.location, mode: "insensitive" } },
+        { address: { contains: filters.location, mode: "insensitive" } },
       ],
     });
   }
-  if (filters.search) and.push({ OR: [{ name: { contains: filters.search } }, { description: { contains: filters.search } }] });
+  if (filters.search) and.push({ OR: [{ name: { contains: filters.search, mode: "insensitive" } }, { description: { contains: filters.search, mode: "insensitive" } }] });
   if (filters.priceMin != null || filters.priceMax != null) {
     and.push({
       units: {
@@ -64,6 +64,8 @@ function buildWhere(filters: ProjectFilters, includeUnpublished: boolean, ownerI
   return {
     ...(ownerId ? { ownerId } : {}),
     ...(includeUnpublished ? {} : { status: "PUBLISHED" }),
+    ...(includeUnpublished && filters.status ? { status: filters.status } : {}),
+    ...(includeUnpublished && filters.ownerRole ? { owner: { role: filters.ownerRole } } : {}),
     ...(filters.type ? { type: filters.type } : {}),
     ...(filters.phase ? { phase: filters.phase } : {}),
     ...(filters.currency ? { currency: filters.currency } : {}),
@@ -146,7 +148,7 @@ export class PrismaProjectRepository implements ProjectRepository {
   }
 
   async setStatus(id: string, status: ProjectStatus, ownerId?: string): Promise<Project | null> {
-    const { count } = await this.prisma.project.updateMany({ where: { id, ...(ownerId ? { ownerId } : {}) }, data: { status } });
+    const { count } = await this.prisma.project.updateMany({ where: { id, ...(ownerId ? { ownerId } : {}), ...(status === "PUBLISHED" ? { status: "DRAFT" } : {}) }, data: { status } });
     if (!count) return null;
 
     const record = await this.prisma.project.findUnique({ where: { id }, include: projectInclude });

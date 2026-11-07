@@ -1,0 +1,55 @@
+# Backend (NestJS) + PostgreSQL — despliegue independiente.
+# La API escucha solo en 127.0.0.1:3101; el Nginx del servidor la publica en https://intinmobiliaria.com/api/
+# (ver Inti_frontend_web/deploy/nginx). La base de datos corre en este mismo servidor, sin puertos publicados: solo el
+# backend puede llegar a ella, por la red interna de Docker. Las imágenes van a Cloudinary, no se guardan aquí.
+#
+# Los datos de la base viven en el volumen "pgdata". NO uses `docker compose down -v`: borraría la base.
+
+name: inti-backend
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: inti_db
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # POSTGRES_USER, POSTGRES_PASSWORD y POSTGRES_DB salen de ../.env (los genera deploy/init-env.sh).
+    env_file: ../.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ..
+    container_name: inti_backend
+    restart: unless-stopped
+    stop_grace_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Variables reales del servidor (ver deploy/.env.production.example); protegidas con chmod 600.
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      TRUST_PROXY_HOPS: 1   # un proxy (Nginx) delante: permite ver la IP real de cada visitante
+    ports:
+      - "127.0.0.1:3101:3001"
+
+volumes:
+  pgdata:

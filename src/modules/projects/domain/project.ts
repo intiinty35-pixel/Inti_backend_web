@@ -1,3 +1,5 @@
+import type { ProfileRole } from "../../../shared/profile-role";
+
 export const PROJECT_TYPES = ["RESIDENTIAL", "COMMERCIAL", "MIXED_USE", "INDUSTRIAL", "LOTIZATION", "LAND_SUBDIVISION"] as const;
 export type ProjectType = (typeof PROJECT_TYPES)[number];
 
@@ -132,6 +134,9 @@ export interface ProjectTimelineEntry extends ProjectTimelineData {
 export interface ProjectSummary extends Omit<ProjectInput, "units" | "media" | "amenities" | "timeline"> {
   id: string;
   ownerId?: string;
+  ownerName?: string;
+  ownerEmail?: string;
+  ownerRole?: Extract<ProfileRole, "AGENT" | "USER">;
   slug: string;
   status: ProjectStatus;
   constructionProgress: number;
@@ -166,6 +171,8 @@ export interface ProjectFilters {
   priceMin?: number;
   priceMax?: number;
   search?: string;
+  status?: ProjectStatus;
+  ownerRole?: Extract<ProfileRole, "AGENT" | "USER">;
   page?: number;
   pageSize?: number;
 }

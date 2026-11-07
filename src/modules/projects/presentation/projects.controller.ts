@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpException, HttpStatus, Ip, Param, Patch, Post, Put, Query, Req, UseFilters, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, HttpException, HttpStatus, Ip, Param, Patch, Post, Put, Query, Req, UseFilters, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { RateLimiter } from "../../../common/rate-limiter";
 import { PrismaService } from "../../../infrastructure/persistence/prisma.service";
@@ -69,13 +69,19 @@ export class ProjectsController {
   @Get()
   async list(@Query() filters: ListProjectsQuery) {
     const page = await this.listProjects.execute(filters);
-    return { ...page, items: page.items.map(({ ownerId: _ownerId, ...item }) => item) };
+    return { ...page, items: page.items.map(({ ownerId: _ownerId, ownerName: _ownerName, ownerEmail: _ownerEmail, ownerRole: _ownerRole, ...item }) => item) };
   }
 
   @Get("admin/all")
   @UseGuards(SessionGuard, AdminGuard)
   listAll(@Query() filters: ListProjectsQuery) {
     return this.listProjects.execute(filters, true);
+  }
+
+  @Patch("admin/:id/publish")
+  @UseGuards(SessionGuard, AdminGuard)
+  publishForAdmin(@Param("id") id: string) {
+    return this.changeStatus.execute(id, "PUBLISHED");
   }
 
   @Get("mine")
@@ -121,7 +127,7 @@ export class ProjectsController {
     const viewer = await this.viewer(request);
     const project = await this.getProject.bySlug(slug, viewer.isAdmin, viewer.userId);
     if (!viewer.isAdmin && project.ownerId !== viewer.userId) {
-      const { ownerId: _ownerId, ...publicProject } = project;
+      const { ownerId: _ownerId, ownerName: _ownerName, ownerEmail: _ownerEmail, ownerRole: _ownerRole, ...publicProject } = project;
       return publicProject;
     }
     return project;
@@ -142,6 +148,7 @@ export class ProjectsController {
   @Patch(":id/status")
   @UseGuards(SessionGuard, MemberGuard)
   setStatus(@Param("id") id: string, @Body() input: ChangeProjectStatusDto, @Req() request: AuthenticatedRequest) {
+    if (input.status === "PUBLISHED") throw new ForbiddenException("Solo el administrador puede publicar un proyecto.");
     return this.changeStatus.execute(id, input.status, this.ownerId(request));
   }
 

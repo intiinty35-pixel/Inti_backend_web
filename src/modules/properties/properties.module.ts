@@ -4,7 +4,6 @@ import { CreatePropertyUseCase } from "./application/create-property.use-case";
 import { ListPropertiesUseCase } from "./application/list-properties.use-case";
 import { PROPERTY_REPOSITORY } from "./domain/property";
 import { PrismaPropertyRepository } from "./infrastructure/prisma-property.repository";
-import { PropertyFileStorage } from "./infrastructure/property-file-storage";
 import { PropertiesController } from "./presentation/properties.controller";
 import { PropertyMediaController } from "./presentation/property-media.controller";
 
@@ -14,7 +13,6 @@ import { PropertyMediaController } from "./presentation/property-media.controlle
   providers: [
     CreatePropertyUseCase,
     ListPropertiesUseCase,
-    PropertyFileStorage,
     PrismaPropertyRepository,
     { provide: PROPERTY_REPOSITORY, useExisting: PrismaPropertyRepository },
   ],

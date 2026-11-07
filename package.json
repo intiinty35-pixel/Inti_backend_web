@@ -15,7 +15,8 @@
     "db:seed:projects": "node --env-file=.env prisma/seed-projects.cjs",
     "db:seed:users": "node --env-file=.env prisma/seed-users.cjs",
     "test": "node --experimental-vm-modules --no-warnings node_modules/jest/bin/jest.js",
-    "test:e2e": "node --experimental-vm-modules --no-warnings node_modules/jest/bin/jest.js --config test/jest-e2e.config.cjs --runInBand"
+    "test:e2e": "node --experimental-vm-modules --no-warnings node_modules/jest/bin/jest.js --config test/jest-e2e.config.cjs --runInBand",
+    "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@nestjs/common": "^12.3.2",
@@ -26,7 +27,10 @@
     "@prisma/client": "6.19.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "cloudinary": "^2.11.0",
+    "helmet": "^8.3.0",
     "multer": "2.5.0",
+    "prisma": "6.19.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
@@ -38,7 +42,6 @@
     "@types/multer": "^2.3.0",
     "@types/node": "^24.19.2",
     "jest": "^30.5.2",
-    "prisma": "6.19.0",
     "ts-jest": "^29.4.15",
     "typescript": "5.9.3"
   }

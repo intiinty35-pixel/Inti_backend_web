@@ -12,6 +12,7 @@ import type {
 
 /** Datos mínimos para listar proyectos: solo lo necesario para calcular estadísticas y mostrar la portada. */
 export const summaryInclude = Prisma.validator<Prisma.ProjectInclude>()({
+  owner: { select: { name: true, email: true, role: true } },
   units: { select: { status: true, price: true, area: true } },
   media: { where: { isCover: true }, take: 1 },
   _count: { select: { comments: true } },
@@ -19,6 +20,7 @@ export const summaryInclude = Prisma.validator<Prisma.ProjectInclude>()({
 export type SummaryRecord = Prisma.ProjectGetPayload<{ include: typeof summaryInclude }>;
 
 export const projectInclude = Prisma.validator<Prisma.ProjectInclude>()({
+  owner: { select: { name: true, email: true, role: true } },
   units: { orderBy: { position: "asc" } },
   media: { orderBy: { position: "asc" } },
   amenities: { orderBy: { id: "asc" } },
@@ -166,6 +168,9 @@ export function toSummary(record: SummaryRecord): ProjectSummary {
   return {
     id: record.id,
     ownerId: record.ownerId ?? undefined,
+    ownerName: record.owner?.name,
+    ownerEmail: record.owner?.email,
+    ownerRole: record.owner?.role === "AGENT" || record.owner?.role === "USER" ? record.owner.role : undefined,
     slug: record.slug,
     name: record.name,
     description: record.description,

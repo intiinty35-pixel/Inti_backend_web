@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, Req, UseGuards } from "@nestjs/common";
 import { PROFILE_ROLES, type ProfileRole } from "../../../shared/profile-role";
 import { AdminGuard } from "../../auth/admin.guard";
 import { MemberGuard } from "../../auth/member.guard";
@@ -38,6 +38,12 @@ export class PropertiesController {
   @UseGuards(SessionGuard, AdminGuard)
   allForAdmin() {
     return this.listProperties.executeManaged();
+  }
+
+  @Patch("admin/:id/publish")
+  @UseGuards(SessionGuard, AdminGuard)
+  publishForAdmin(@Param("id") id: string) {
+    return this.listProperties.publishManaged(id);
   }
 
   @Post()

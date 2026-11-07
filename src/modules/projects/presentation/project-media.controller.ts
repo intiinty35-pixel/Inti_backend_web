@@ -1,31 +1,15 @@
-import {
-  BadRequestException,
-  Controller,
-  Get,
-  Header,
-  NotFoundException,
-  Param,
-  Post,
-  StreamableFile,
-  UploadedFiles,
-  UseGuards,
-  UseInterceptors,
-} from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { BadRequestException, Controller, Post, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { SessionGuard } from "../../auth/session.guard";
-import { ProjectFileStorage } from "../infrastructure/project-file-storage";
+import { IMAGE_FOLDERS, ImageStorage, type StoredImage } from "../../../shared/image-storage";
 
 const MAX_FILES = 12;
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 
 @Controller("projects/media")
 export class ProjectMediaController {
-  constructor(
-    private readonly config: ConfigService,
-    private readonly files: ProjectFileStorage,
-  ) {}
+  constructor(private readonly images: ImageStorage) {}
 
   @Post()
   @UseGuards(SessionGuard)
@@ -33,25 +17,18 @@ export class ProjectMediaController {
   async upload(@UploadedFiles() uploads: Array<{ buffer: Buffer }> = []) {
     if (uploads.length === 0) throw new BadRequestException("Selecciona al menos una imagen.");
 
-    const saved: string[] = [];
-    for (const upload of uploads) {
-      const filename = await this.files.saveImage(upload.buffer);
-      if (!filename) {
-        await this.files.remove(saved);
-        throw new BadRequestException("Solo se permiten imágenes JPG, PNG o WEBP.");
+    const saved: StoredImage[] = [];
+    try {
+      for (const upload of uploads) {
+        const image = await this.images.save(upload.buffer, IMAGE_FOLDERS.projects);
+        if (!image) throw new BadRequestException("Solo se permiten imágenes JPG, PNG o WEBP.");
+        saved.push(image);
       }
-      saved.push(filename);
+    } catch (error) {
+      await this.images.remove(saved.map((image) => image.publicId));
+      throw error;
     }
 
-    const baseUrl = this.config.get<string>("app.publicUrl", "http://localhost:3001");
-    return { media: saved.map((filename) => ({ url: `${baseUrl}/api/projects/media/${filename}`, publicId: filename })) };
-  }
-
-  @Get(":filename")
-  @Header("Cache-Control", "public, max-age=86400, immutable")
-  getImage(@Param("filename") filename: string) {
-    const file = this.files.open(filename);
-    if (!file) throw new NotFoundException("No se encontró la imagen.");
-    return new StreamableFile(file.stream, { type: file.mime });
+    return { media: saved };
   }
 }
