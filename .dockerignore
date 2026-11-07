@@ -1,0 +1,17 @@
+node_modules
+dist
+.next
+.env
+.env.local
+.env.production
+.env.development
+.git
+.gitignore
+README.md
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+BUILD
+OUT
+*.tsbuildinfo
