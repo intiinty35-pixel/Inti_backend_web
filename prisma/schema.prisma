@@ -29,6 +29,7 @@ model User {
   subscriptions Subscription[]
   favorites     Favorite[]
   notifications Notification[]
+  passwordChangedAt DateTime?
 
   @@index([role, createdAt])
   @@map("users")
@@ -534,4 +535,22 @@ model Notification {
   @@index([userId, createdAt])
   @@index([type, entityId, createdAt])
   @@map("notifications")
+}
+
+model ComplaintBookEntry {
+  id                  String   @id @default(cuid())
+  ticketNumber        String   @unique
+  claimantName        String
+  claimantEmail       String
+  claimantPhone       String
+  documentNumber      String?
+  entryType           String
+  serviceDescription  String
+  detail              String
+  desiredResolution   String?
+  createdAt           DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([claimantEmail, createdAt])
+  @@map("complaint_book_entries")
 }

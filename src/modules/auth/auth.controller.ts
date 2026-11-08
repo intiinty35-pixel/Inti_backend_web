@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Ip, Post, UnauthorizedException, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, HttpException, HttpStatus, Ip, Post, Put, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { timingSafeEqual } from "node:crypto";
 import { RateLimiter } from "../../common/rate-limiter";
@@ -9,7 +9,8 @@ import { AuthTokenService } from "./auth-token.service";
 import { LoginDto } from "./login.dto";
 import { RegisterAccountDto } from "./presentation/register-account.dto";
 import { RegisterAccountUseCase } from "./application/register-account.use-case";
-import { SessionGuard } from "./session.guard";
+import { SessionGuard, type AuthenticatedRequest } from "./session.guard";
+import { ChangePasswordDto } from "./change-password.dto";
 
 function matchesSecret(candidate: string, expected: string): boolean {
   const candidateBuffer = Buffer.from(candidate);
@@ -48,14 +49,28 @@ export class AuthController {
     const adminPassword = this.config.get<string>("app.adminPassword", "");
 
     if (email === adminEmail && adminPassword) {
-      if (!matchesSecret(input.password, adminPassword)) {
+      const existingAdmin = await this.prisma.user.findUnique({ where: { email: adminEmail } });
+      const hasChangedAdminPassword = existingAdmin?.role === PROFILE_ROLES.ADMINISTRATOR && existingAdmin.passwordChangedAt !== null;
+      const matchesStoredAdminPassword = existingAdmin?.role === PROFILE_ROLES.ADMINISTRATOR
+        ? await verifyPassword(input.password, existingAdmin.passwordHash)
+        : false;
+      const matchesConfiguredAdminPassword = matchesSecret(input.password, adminPassword);
+      const validPassword = hasChangedAdminPassword
+        ? matchesStoredAdminPassword
+        : matchesConfiguredAdminPassword || matchesStoredAdminPassword;
+      if (!validPassword) {
         this.attempts.record(attemptKey);
         throw new UnauthorizedException("Correo o contraseña incorrectos.");
       }
 
       const admin = await this.prisma.user.upsert({
         where: { email: adminEmail },
-        update: { name: "Administrador", role: PROFILE_ROLES.ADMINISTRATOR, isActive: true },
+        update: {
+          name: "Administrador",
+          role: PROFILE_ROLES.ADMINISTRATOR,
+          isActive: true,
+          ...(matchesConfiguredAdminPassword && !hasChangedAdminPassword ? { passwordHash: await hashPassword(adminPassword) } : {}),
+        },
         create: {
           name: "Administrador",
           email: adminEmail,
@@ -83,4 +98,25 @@ export class AuthController {
   @Post("logout")
   @UseGuards(SessionGuard)
   logout() { return { authenticated: false }; }
+
+  @Put("password")
+  @UseGuards(SessionGuard)
+  async changePassword(@Body() input: ChangePasswordDto, @Req() request: AuthenticatedRequest) {
+    if (input.newPassword !== input.confirmPassword) throw new BadRequestException("La nueva contraseña y su confirmación no coinciden.");
+    if (!/[A-Z]/.test(input.newPassword) || !/[a-z]/.test(input.newPassword) || !/\d/.test(input.newPassword) || !/[^A-Za-z\d\s]/.test(input.newPassword) || /\s/.test(input.newPassword)) {
+      throw new BadRequestException("La nueva contraseña debe incluir mayúscula, minúscula, número y símbolo, sin espacios.");
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: request.auth.id } });
+    if (!user || !(await verifyPassword(input.currentPassword, user.passwordHash))) {
+      throw new UnauthorizedException("La contraseña actual es incorrecta.");
+    }
+    if (await verifyPassword(input.newPassword, user.passwordHash)) {
+      throw new BadRequestException("La nueva contraseña debe ser diferente de la actual.");
+    }
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await hashPassword(input.newPassword), passwordChangedAt: new Date() },
+    });
+    return { updated: true };
+  }
 }
