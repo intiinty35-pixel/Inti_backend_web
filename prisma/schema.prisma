@@ -27,6 +27,8 @@ model User {
   propertyReviews PropertyReview[]
   paymentOrders PaymentOrder[]
   subscriptions Subscription[]
+  favorites     Favorite[]
+  notifications Notification[]
 
   @@index([role, createdAt])
   @@map("users")
@@ -495,4 +497,41 @@ model NotificationOutbox {
   createdAt DateTime @default(now())
   @@index([status, nextAttemptAt])
   @@map("notification_outbox")
+}
+
+// Publicaciones (propiedades o proyectos) que una persona guarda para volver a verlas.
+model Favorite {
+  id          String   @id @default(cuid())
+  userId      String
+  listingType String
+  listingId   String
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingType, listingId])
+  @@index([userId, createdAt])
+  @@index([listingType, listingId])
+  @@map("favorites")
+}
+
+// Avisos dentro de la plataforma (campana): alguien guardó tu publicación, recibiste una consulta, etc.
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  type       String
+  title      String
+  message    String
+  actionUrl  String?
+  entityType String?
+  entityId   String?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@index([userId, createdAt])
+  @@index([type, entityId, createdAt])
+  @@map("notifications")
 }
