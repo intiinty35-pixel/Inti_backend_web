@@ -4,7 +4,7 @@ export type OperationType = "SALE" | "RENT" | "TEMPORARY_RENT" | "TRANSFER";
 export type PropertyType = "APARTMENT" | "HOUSE" | "LAND" | "OFFICE" | "COMMERCIAL" | "ROOM" | "WAREHOUSE" | "PARKING";
 export type Currency = "BOB" | "USD";
 export type ConservationStatus = "NEW" | "EXCELLENT" | "GOOD" | "REMODELED" | "TO_REMODEL" | "UNDER_CONSTRUCTION";
-export type PropertyStatus = "DRAFT" | "PUBLISHED" | "PAUSED";
+export type PropertyStatus = "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "PAUSED" | "EXPIRED" | "REJECTED";
 
 export interface PropertyLocation {
   department: string;
@@ -68,6 +68,10 @@ export interface Property extends Omit<CreatePropertyData, "createdByRole"> {
   ownerName?: string;
   ownerEmail?: string;
   status: PropertyStatus;
+  averageRating?: number;
+  reviewsCount?: number;
+  commentsCount?: number;
+  isFeatured?: boolean;
   createdAt: string;
   updatedAt: string;
 }

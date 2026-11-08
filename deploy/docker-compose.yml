@@ -50,6 +50,9 @@ services:
       TRUST_PROXY_HOPS: 1   # un proxy (Nginx) delante: permite ver la IP real de cada visitante
     ports:
       - "127.0.0.1:3101:3001"
+    volumes:
+      - private_receipts:/app/data
 
 volumes:
   pgdata:
+  private_receipts:

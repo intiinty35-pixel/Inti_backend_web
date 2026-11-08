@@ -1,4 +1,6 @@
 import { Injectable } from "@nestjs/common";
+import { audit } from "../../billing/billing.store";
+import { auditContext } from "../../audit/audit-context";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../../infrastructure/persistence/prisma.service";
 import {
@@ -63,7 +65,7 @@ function buildWhere(filters: ProjectFilters, includeUnpublished: boolean, ownerI
 
   return {
     ...(ownerId ? { ownerId } : {}),
-    ...(includeUnpublished ? {} : { status: "PUBLISHED" }),
+    ...(includeUnpublished ? {} : { status: "PUBLISHED", owner: { isActive: true, accountStatus: "ACTIVE" }, subscription: { status: "ACTIVE", startsAt: { lte: new Date() }, expiresAt: { gt: new Date() } } }),
     ...(includeUnpublished && filters.status ? { status: filters.status } : {}),
     ...(includeUnpublished && filters.ownerRole ? { owner: { role: filters.ownerRole } } : {}),
     ...(filters.type ? { type: filters.type } : {}),
@@ -83,7 +85,8 @@ export class PrismaProjectRepository implements ProjectRepository {
 
   async create(data: ProjectInput, ownerId?: string): Promise<Project> {
     const relations = relationCreates(data);
-    const record = await this.prisma.project.create({
+    const record = await this.prisma.$transaction(async (tx) => {
+      const saved = await tx.project.create({
       data: {
         ownerId,
         ...projectScalars(data),
@@ -94,7 +97,11 @@ export class PrismaProjectRepository implements ProjectRepository {
         timeline: { create: relations.timeline },
       },
       include: projectInclude,
-    });
+      });
+      const actor = auditContext.getStore()?.request.auth?.id ?? 'SYSTEM';
+      await audit(tx, actor, saved.id, 'PROJECT_CREATED', saved.ownerId ?? undefined, undefined, saved);
+      return saved;
+    }, { timeout: 30000 });
     return toProject(record);
   }
 
@@ -133,18 +140,22 @@ export class PrismaProjectRepository implements ProjectRepository {
       const keptPublicIds = new Set(data.media.flatMap((item) => (item.publicId ? [item.publicId] : [])));
       const removedPublicIds = existing.media.flatMap((item) => (item.publicId && !keptPublicIds.has(item.publicId) ? [item.publicId] : []));
       const record = await tx.project.findUniqueOrThrow({ where: { id }, include: projectInclude });
+      const actor = auditContext.getStore()?.request.auth?.id ?? 'SYSTEM';
+      await audit(tx, actor, id, 'PROJECT_UPDATED', existing.ownerId ?? undefined, existing, record);
       return { project: toProject(record), removedPublicIds };
-    });
+    }, { timeout: 30000 });
   }
 
   async delete(id: string, ownerId?: string): Promise<{ publicIds: string[] } | null> {
-    const existing = await this.prisma.project.findFirst({
-      where: { id, ...(ownerId ? { ownerId } : {}) },
-      select: { media: { select: { publicId: true } } },
-    });
-    if (!existing) return null;
-    await this.prisma.project.deleteMany({ where: { id, ...(ownerId ? { ownerId } : {}) } });
-    return { publicIds: existing.media.flatMap((item) => (item.publicId ? [item.publicId] : [])) };
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.project.findFirst({ where: { id, ...(ownerId ? { ownerId } : {}) }, include: { media: { select: { publicId: true } } } });
+      if (!existing) return null;
+      const removed = await tx.project.deleteMany({ where: { id, ...(ownerId ? { ownerId } : {}) } });
+      if (!removed.count) return null;
+      const actorId = auditContext.getStore()?.request.auth?.id ?? ownerId ?? "SYSTEM";
+      await audit(tx, actorId, id, "PROJECT_DELETED", existing.ownerId ?? undefined, existing, { deleted: true });
+      return { publicIds: existing.media.flatMap((item) => (item.publicId ? [item.publicId] : [])) };
+    }, { timeout: 30000 });
   }
 
   async setStatus(id: string, status: ProjectStatus, ownerId?: string): Promise<Project | null> {

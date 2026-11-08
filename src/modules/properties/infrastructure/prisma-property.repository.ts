@@ -1,16 +1,20 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../../../infrastructure/persistence/prisma.service";
 import type { CreatePropertyData, Property, PropertyRepository, PropertyStatus } from "../domain/property";
+import { compareProperties } from "../domain/property-ranking";
+import { audit } from "../../billing/billing.store";
+import { auditContext } from "../../audit/audit-context";
 
-const propertyInclude = Prisma.validator<Prisma.PropertyInclude>()({
+const propertyInclude = {
   owner: { select: { name: true, email: true } },
   location: true,
   details: true,
   amenities: true,
+  reviews: { select: { rating: true, comment: true } },
   media: { orderBy: { position: "asc" } },
-});
+} satisfies Prisma.PropertyInclude;
 
 function parseSpecificDetails(value: string | null | undefined): Record<string, string | number | boolean> {
   if (!value) return {};
@@ -38,7 +42,8 @@ export class PrismaPropertyRepository implements PropertyRepository {
       .replace(/^-|-$/g, "")
       .slice(0, 70);
 
-    const property = await this.prisma.property.create({
+    const property = await this.prisma.$transaction(async (tx) => {
+      const saved = await tx.property.create({
       data: {
         ownerId: data.ownerId,
         status: "DRAFT",
@@ -83,7 +88,11 @@ export class PrismaPropertyRepository implements PropertyRepository {
         },
       },
       include: propertyInclude,
-    });
+      });
+      const actor = auditContext.getStore()?.request.auth?.id ?? 'SYSTEM';
+      await audit(tx, actor, saved.id, 'PROPERTY_CREATED', saved.ownerId ?? undefined, undefined, saved);
+      return saved;
+    }, { timeout: 30000 });
 
     return this.toDomain(property);
   }
@@ -117,7 +126,9 @@ export class PrismaPropertyRepository implements PropertyRepository {
       longitude: data.location.longitude ?? null,
     };
 
-    const property = await this.prisma.property.update({
+    const property = await this.prisma.$transaction(async (tx) => {
+      const previous = await tx.property.findUnique({ where: { id }, include: propertyInclude });
+      const saved = await tx.property.update({
       where: { id },
       data: {
         operationType: data.operationType,
@@ -149,7 +160,11 @@ export class PrismaPropertyRepository implements PropertyRepository {
         },
       },
       include: propertyInclude,
-    });
+      });
+      const actor = auditContext.getStore()?.request.auth?.id ?? 'SYSTEM';
+      await audit(tx, actor, saved.id, 'PROPERTY_UPDATED', saved.ownerId ?? undefined, previous, saved);
+      return saved;
+    }, { timeout: 30000 });
 
     return this.toDomain(property);
   }
@@ -163,11 +178,11 @@ export class PrismaPropertyRepository implements PropertyRepository {
 
   async findAll(): Promise<Property[]> {
     const properties = await this.prisma.property.findMany({
-      where: { status: "PUBLISHED" },
+      where: { status: "PUBLISHED", owner: { isActive: true, accountStatus: "ACTIVE" }, subscription: { status: "ACTIVE", startsAt: { lte: new Date() }, expiresAt: { gt: new Date() } } },
       orderBy: { createdAt: "desc" },
       include: propertyInclude,
     });
-    return properties.map((property) => this.toDomain(property));
+    return properties.map((property) => this.toDomain(property)).sort(compareProperties);
   }
 
   async findManaged(ownerId?: string): Promise<Property[]> {
@@ -180,13 +195,15 @@ export class PrismaPropertyRepository implements PropertyRepository {
   }
 
   async deleteManaged(id: string, ownerId?: string): Promise<{ publicIds: string[] } | null> {
-    const existing = await this.prisma.property.findFirst({
-      where: { id, ...(ownerId ? { ownerId } : {}) },
-      select: { media: { select: { publicId: true } } },
-    });
-    if (!existing) return null;
-    await this.prisma.property.deleteMany({ where: { id, ...(ownerId ? { ownerId } : {}) } });
-    return { publicIds: existing.media.flatMap((item) => (item.publicId ? [item.publicId] : [])) };
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.property.findFirst({ where: { id, ...(ownerId ? { ownerId } : {}) }, include: { media: { select: { publicId: true } } } });
+      if (!existing) return null;
+      const removed = await tx.property.deleteMany({ where: { id, ...(ownerId ? { ownerId } : {}) } });
+      if (!removed.count) return null;
+      const actorId = auditContext.getStore()?.request.auth?.id ?? ownerId ?? "SYSTEM";
+      await audit(tx, actorId, id, "PROPERTY_DELETED", existing.ownerId ?? undefined, existing, { deleted: true });
+      return { publicIds: existing.media.flatMap((item) => (item.publicId ? [item.publicId] : [])) };
+    }, { timeout: 30000 });
   }
 
   private toDomain(record: PropertyRecord): Property {
@@ -245,6 +262,10 @@ export class PrismaPropertyRepository implements PropertyRepository {
         isCover: item.isCover,
       })),
       status: record.status as PropertyStatus,
+      isFeatured: record.isFeatured,
+      averageRating: record.reviews.length ? record.reviews.reduce((sum, review) => sum + review.rating, 0) / record.reviews.length : 0,
+      reviewsCount: record.reviews.length,
+      commentsCount: record.reviews.filter((review) => review.comment.trim().length > 0).length,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     };

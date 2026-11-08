@@ -6,10 +6,11 @@ import { PROPERTY_REPOSITORY } from "./domain/property";
 import { PrismaPropertyRepository } from "./infrastructure/prisma-property.repository";
 import { PropertiesController } from "./presentation/properties.controller";
 import { PropertyMediaController } from "./presentation/property-media.controller";
+import { PropertyReviewsController } from "./presentation/property-reviews.controller";
 
 @Module({
   imports: [AuthModule],
-  controllers: [PropertiesController, PropertyMediaController],
+  controllers: [PropertiesController, PropertyMediaController, PropertyReviewsController],
   providers: [
     CreatePropertyUseCase,
     ListPropertiesUseCase,

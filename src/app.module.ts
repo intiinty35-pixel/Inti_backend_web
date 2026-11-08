@@ -12,6 +12,8 @@ import { ProfilesModule } from "./modules/profiles/profiles.module";
 import { PropertiesModule } from "./modules/properties/properties.module";
 import { ProjectsModule } from "./modules/projects/projects.module";
 import { UsersModule } from "./modules/users/users.module";
+import { BillingModule } from "./modules/billing/billing.module";
+import { AuditModule } from "./modules/audit/audit.module";
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { UsersModule } from "./modules/users/users.module";
     InquiriesModule,
     ProfilesModule,
     UsersModule,
+    BillingModule,
+    AuditModule,
     PropertiesModule,
     ProjectsModule,
   ],

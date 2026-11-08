@@ -18,11 +18,15 @@ model User {
   passwordHash String
   role         String       @default("USER")
   isActive     Boolean      @default(true)
+  accountStatus String @default("ACTIVE")
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   properties   Property[]
   projects     Project[]
   loginEvents  LoginEvent[]
+  propertyReviews PropertyReview[]
+  paymentOrders PaymentOrder[]
+  subscriptions Subscription[]
 
   @@index([role, createdAt])
   @@map("users")
@@ -63,11 +67,31 @@ model Property {
   amenities       PropertyAmenity[]
   media           PropertyMedia[]
   owner           User?             @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  reviews         PropertyReview[]
+  isFeatured      Boolean @default(false)
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([ownerId, createdAt])
   @@index([operationType, propertyType])
   @@map("properties")
+}
+
+model PropertyReview {
+  id         String @id @default(cuid())
+  propertyId String
+  userId     String
+  rating     Int
+  comment    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, userId])
+  @@index([propertyId, createdAt])
+  @@map("property_reviews")
 }
 
 model PropertyLocation {
@@ -131,6 +155,8 @@ model PropertyMedia {
 }
 
 model Project {
+  subscriptionId String?
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   id                   String            @id @default(cuid())
   ownerId              String?
   slug                 String            @unique
@@ -271,4 +297,202 @@ model Inquiry {
   @@index([ownerId, createdAt])
   @@index([listingType, listingId, createdAt])
   @@map("inquiries")
+}
+
+enum PaymentOrderStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  SUSPENDED
+}
+
+enum ManualPaymentType {
+  YAPE
+  QR_BCP
+  BANK_TRANSFER
+}
+
+model CommercialPlan {
+  id String @id @default(cuid())
+  slot Int @unique
+  name String
+  description String @default("")
+  priceBOB Decimal? @db.Decimal(12, 2)
+  priceAmount Decimal? @db.Decimal(12, 2)
+  priceCurrency String @default("BOB")
+  maxProjects Int @default(0)
+  archivedAt DateTime?
+  durationDays Int @default(30)
+  maxProperties Int @default(1)
+  maxPhotos Int @default(12)
+  featuredLimit Int @default(0)
+  benefits String[] @default([])
+  displayOrder Int @default(0)
+  isActive Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders PaymentOrder[]
+  subscriptions Subscription[]
+  @@map("commercial_plans")
+}
+
+model BillingSettings {
+  id String @id @default("billing")
+  bobPerUsd Decimal? @db.Decimal(12, 6)
+  orderExpiryHours Int @default(24)
+  updatedAt DateTime @updatedAt
+  @@map("billing_settings")
+}
+
+model ManualPaymentMethod {
+  id String @id @default(cuid())
+  name String
+  type ManualPaymentType @unique
+  provider String @default("")
+  holder String @default("")
+  phone String @default("")
+  accountNumber String @default("")
+  bankCode String @default("")
+  qrImageUrl String @default("")
+  currencies String[] @default([])
+  instructions String @default("")
+  isActive Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders PaymentOrder[]
+  @@map("manual_payment_methods")
+}
+
+model PaymentOrder {
+  id String @id @default(cuid())
+  number String @unique
+  userId String
+  planId String
+  methodId String
+  status PaymentOrderStatus @default(PENDING)
+  currency String
+  amountBOB Decimal @db.Decimal(12, 2)
+  amountUSD Decimal @db.Decimal(12, 2)
+  amount Decimal @db.Decimal(12, 2)
+  exchangeRate Decimal @db.Decimal(12, 6)
+  planSnapshot Json
+  methodSnapshot Json
+  rejectionReason String?
+  reviewedBy String?
+  reviewedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  plan CommercialPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  method ManualPaymentMethod @relation(fields: [methodId], references: [id], onDelete: Restrict)
+  receipts PaymentReceipt[]
+  subscription Subscription?
+  @@index([status, expiresAt])
+  @@index([userId, createdAt])
+  @@index([planId, methodId, currency, createdAt])
+  @@map("payment_orders")
+}
+
+model PaymentReceipt {
+  id String @id @default(cuid())
+  orderId String
+  fileKey String @unique
+  originalName String
+  mimeType String
+  size Int
+  createdAt DateTime @default(now())
+  order PaymentOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  @@index([orderId, createdAt])
+  @@map("payment_receipts")
+}
+
+model Subscription {
+  id String @id @default(cuid())
+  userId String
+  planId String
+  orderId String? @unique
+  source String @default("MANUAL")
+  maxProjects Int @default(0)
+  status SubscriptionStatus @default(PENDING)
+  startsAt DateTime
+  expiresAt DateTime
+  cancelledAt DateTime?
+  planName String
+  maxProperties Int
+  maxPhotos Int
+  featuredLimit Int
+  planSnapshot Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  plan CommercialPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  order PaymentOrder? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  properties Property[]
+  projects Project[]
+  @@index([userId, status, expiresAt])
+  @@map("subscriptions")
+}
+
+model BillingAudit {
+  id String @id @default(cuid())
+  actorId String
+  userId String?
+  resourceId String
+  action String
+  category String @default("SYSTEM")
+  actorName String?
+  actorEmail String?
+  actorRole String?
+  subjectName String?
+  resourceName String?
+  ipAddress String?
+  userAgent String?
+  device String?
+  requestId String?
+  httpMethod String?
+  path String?
+  statusCode Int?
+  success Boolean @default(true)
+  metadata Json?
+  reason String?
+  before Json?
+  after Json?
+  createdAt DateTime @default(now())
+  @@index([resourceId, createdAt])
+  @@index([userId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([actorRole, createdAt])
+  @@index([category, createdAt])
+  @@index([requestId])
+  @@index([createdAt, id])
+  @@index([action, createdAt])
+  @@map("billing_audit")
+}
+
+model NotificationOutbox {
+  id String @id @default(cuid())
+  eventKey String @unique
+  recipient String
+  subject String
+  text String
+  status String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  lockedAt DateTime?
+  sentAt DateTime?
+  lastError String?
+  createdAt DateTime @default(now())
+  @@index([status, nextAttemptAt])
+  @@map("notification_outbox")
 }

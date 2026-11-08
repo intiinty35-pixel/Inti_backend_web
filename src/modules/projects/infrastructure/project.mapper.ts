@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import type {
   Project,
@@ -11,22 +11,23 @@ import type {
 } from "../domain/project";
 
 /** Datos mínimos para listar proyectos: solo lo necesario para calcular estadísticas y mostrar la portada. */
-export const summaryInclude = Prisma.validator<Prisma.ProjectInclude>()({
+export const summaryInclude = {
   owner: { select: { name: true, email: true, role: true } },
   units: { select: { status: true, price: true, area: true } },
   media: { where: { isCover: true }, take: 1 },
   _count: { select: { comments: true } },
-});
+} satisfies Prisma.ProjectInclude;
 export type SummaryRecord = Prisma.ProjectGetPayload<{ include: typeof summaryInclude }>;
 
-export const projectInclude = Prisma.validator<Prisma.ProjectInclude>()({
+export const projectInclude = {
+  subscription: { select: { status: true, startsAt: true, expiresAt: true, user: { select: { isActive: true, accountStatus: true } } } },
   owner: { select: { name: true, email: true, role: true } },
   units: { orderBy: { position: "asc" } },
   media: { orderBy: { position: "asc" } },
   amenities: { orderBy: { id: "asc" } },
   timeline: { orderBy: { date: "asc" } },
   _count: { select: { comments: true } },
-});
+} satisfies Prisma.ProjectInclude;
 export type ProjectRecord = Prisma.ProjectGetPayload<{ include: typeof projectInclude }>;
 type UnitRecord = ProjectRecord["units"][number];
 
@@ -214,8 +215,10 @@ export function toSummary(record: SummaryRecord): ProjectSummary {
 }
 
 export function toProject(record: ProjectRecord): Project {
+  const covered = record.subscription?.status === "ACTIVE" && record.subscription.startsAt <= new Date() && record.subscription.expiresAt > new Date() && record.subscription.user.isActive && record.subscription.user.accountStatus === "ACTIVE";
   return {
     ...toSummary(record),
+    status: record.status === "PUBLISHED" && !covered ? "PAUSED" : record.status as ProjectStatus,
     units: record.units.map(toUnit),
     media: record.media.map((item) => ({
       id: item.id,

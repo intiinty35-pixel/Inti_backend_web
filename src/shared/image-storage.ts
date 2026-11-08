@@ -4,6 +4,7 @@ export const IMAGE_ROOT = "inti";
 export const IMAGE_FOLDERS = {
   properties: `${IMAGE_ROOT}/properties`,
   projects: `${IMAGE_ROOT}/projects`,
+  paymentQr: `${IMAGE_ROOT}/payment-qr`,
 } as const;
 
 export type ImageFolder = (typeof IMAGE_FOLDERS)[keyof typeof IMAGE_FOLDERS];

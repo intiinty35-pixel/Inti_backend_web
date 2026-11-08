@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Ip, Post, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, HttpException, HttpStatus, Ip, Post, UnauthorizedException, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { timingSafeEqual } from "node:crypto";
 import { RateLimiter } from "../../common/rate-limiter";
@@ -9,6 +9,7 @@ import { AuthTokenService } from "./auth-token.service";
 import { LoginDto } from "./login.dto";
 import { RegisterAccountDto } from "./presentation/register-account.dto";
 import { RegisterAccountUseCase } from "./application/register-account.use-case";
+import { SessionGuard } from "./session.guard";
 
 function matchesSecret(candidate: string, expected: string): boolean {
   const candidateBuffer = Buffer.from(candidate);
@@ -69,7 +70,7 @@ export class AuthController {
     }
 
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user || !user.isActive || !(await verifyPassword(input.password, user.passwordHash))) {
+    if (!user || !user.isActive || user.accountStatus !== "ACTIVE" || !(await verifyPassword(input.password, user.passwordHash))) {
       this.attempts.record(attemptKey);
       throw new UnauthorizedException("Correo o contraseña incorrectos.");
     }
@@ -78,4 +79,8 @@ export class AuthController {
     await this.prisma.loginEvent.create({ data: { userId: user.id } });
     return { authenticated: true, id: user.id, role: user.role, name: user.name, email: user.email, token, expiresAt };
   }
+
+  @Post("logout")
+  @UseGuards(SessionGuard)
+  logout() { return { authenticated: false }; }
 }

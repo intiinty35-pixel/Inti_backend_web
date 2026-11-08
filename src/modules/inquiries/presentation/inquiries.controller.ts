@@ -12,6 +12,7 @@ export class InquiriesController {
   constructor(private readonly inquiries: InquiriesService) {}
 
   @Post()
+  @UseGuards(SessionGuard)
   create(@Body() input: CreateInquiryDto, @Ip() ip: string) {
     if (!this.attempts.allow(ip)) {
       throw new HttpException("Estás enviando consultas muy rápido. Espera un minuto e inténtalo de nuevo.", HttpStatus.TOO_MANY_REQUESTS);

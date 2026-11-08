@@ -24,6 +24,7 @@ import {
   UpdateProjectUnitDto,
 } from "./project.dto";
 import { ProjectDomainErrorFilter } from "./project-domain-error.filter";
+import { SubscriptionPolicyService } from "../../billing/subscription-policy.service";
 
 @Controller("projects")
 @UseFilters(ProjectDomainErrorFilter)
@@ -42,6 +43,7 @@ export class ProjectsController {
     private readonly comments: ProjectCommentsUseCase,
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly subscriptions: SubscriptionPolicyService,
   ) {}
 
   private async viewer(request: RequestWithAuthorization): Promise<{ isAdmin: boolean; userId?: string }> {
@@ -80,8 +82,9 @@ export class ProjectsController {
 
   @Patch("admin/:id/publish")
   @UseGuards(SessionGuard, AdminGuard)
-  publishForAdmin(@Param("id") id: string) {
-    return this.changeStatus.execute(id, "PUBLISHED");
+  async publishForAdmin(@Param("id") id: string, @Req() request: AuthenticatedRequest) {
+    await this.subscriptions.approveProject(id, request.auth.id);
+    return this.getProject.byId(id);
   }
 
   @Get("mine")

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { UploadApiResponse, v2 } from "cloudinary";
 import { isSupportedImage } from "../../shared/image-signature";
@@ -42,7 +42,7 @@ export class CloudinaryImageStorage extends ImageStorage {
       return { url: result.secure_url, publicId: result.public_id };
     } catch (error) {
       this.logger.error(`No se pudo subir la imagen a Cloudinary: ${error instanceof Error ? error.message : String(error)}`);
-      throw new Error("No se pudo guardar la imagen en el servicio de almacenamiento.");
+      throw new ServiceUnavailableException("No se pudo guardar la imagen en el servicio de almacenamiento. Intenta de nuevo en unos momentos.");
     }
   }
 

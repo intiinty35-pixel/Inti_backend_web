@@ -23,7 +23,7 @@ export class SessionGuard implements CanActivate {
 
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (user) {
-      if (!user.isActive || user.role !== payload.role) throw new UnauthorizedException("La sesión ya no es válida.");
+      if (!user.isActive || user.accountStatus !== "ACTIVE" || user.role !== payload.role) throw new UnauthorizedException("La sesión ya no es válida.");
       request.auth = { id: user.id, name: user.name, email: user.email, role: user.role };
       return true;
     }

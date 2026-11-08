@@ -5,6 +5,8 @@ import { PROFILE_ROLES, type ProfileRole } from "../../shared/profile-role";
 import { hashPassword } from "../../shared/password-hash";
 import { AdminGuard } from "../auth/admin.guard";
 import { AuthenticatedRequest, SessionGuard } from "../auth/session.guard";
+import { BillingAccountsService } from "../billing/billing-accounts.service";
+import { audit } from "../billing/billing.store";
 
 class CreateUserDto {
   @IsString() @MinLength(2) name!: string;
@@ -15,12 +17,13 @@ class CreateUserDto {
 
 class UserStatusDto {
   @IsBoolean() isActive!: boolean;
+  @IsString() @MinLength(3) reason!: string;
 }
 
 @Controller("users")
 @UseGuards(SessionGuard, AdminGuard)
 export class UsersController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly billingAccounts: BillingAccountsService) {}
 
   @Get()
   async list() {
@@ -31,6 +34,7 @@ export class UsersController {
         email: true,
         role: true,
         isActive: true,
+        accountStatus: true,
         createdAt: true,
         _count: { select: { properties: true, projects: true } },
       },
@@ -68,6 +72,10 @@ export class UsersController {
   ) {
     const target = await this.prisma.user.findUnique({ where: { id } });
     if (!target) throw new NotFoundException("No se encontró el usuario.");
+    if (target.role !== PROFILE_ROLES.ADMINISTRATOR) {
+      await this.billingAccounts.change(id, request.auth.id, { status: input.isActive ? "ACTIVE" : "INACTIVE", reason: input.reason });
+      return this.prisma.user.findUnique({ where: { id }, select: { id: true, name: true, email: true, role: true, isActive: true, accountStatus: true, createdAt: true } });
+    }
     if (target.id === request.auth.id && !input.isActive) {
       throw new ConflictException("No puedes desactivar tu propia cuenta.");
     }
@@ -80,6 +88,7 @@ export class UsersController {
       data: { isActive: input.isActive },
       select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
     });
+    await audit(this.prisma, request.auth.id, id, "ADMIN_ACCOUNT_ACCESS_CHANGED", id, { isActive: target.isActive }, { isActive: user.isActive }, input.reason);
     return { ...user, createdAt: user.createdAt.toISOString() };
   }
 }

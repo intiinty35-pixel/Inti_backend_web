@@ -33,6 +33,8 @@ COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --from=builder --chown=node:node /app/package.json ./
 
+RUN mkdir -p /app/data/private/payment-receipts && chown -R node:node /app/data
+VOLUME ["/app/data"]
 USER node
 EXPOSE 3001
 

@@ -1,4 +1,5 @@
 import type { ConfigService } from "@nestjs/config";
+import { ServiceUnavailableException } from "@nestjs/common";
 import { IMAGE_FOLDERS } from "../../shared/image-storage";
 import type { PrismaService } from "../persistence/prisma.service";
 import { CloudinaryImageStorage, type CloudinarySdk } from "./cloudinary-image-storage";
@@ -45,6 +46,7 @@ describe("CloudinaryImageStorage.save", () => {
     uploader.upload_stream.mockImplementation((_options, callback) => ({ end: () => callback(new Error("Invalid api_key abc123"), undefined) }));
     const { storage } = makeStorage();
     await expect(storage.save(PNG, IMAGE_FOLDERS.properties)).rejects.toThrow("No se pudo guardar la imagen en el servicio de almacenamiento.");
+    await expect(storage.save(PNG, IMAGE_FOLDERS.properties)).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 });
 
