@@ -7,7 +7,9 @@ import { StorageModule } from "./infrastructure/storage/storage.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { HealthModule } from "./modules/health/health.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
+import { FavoritesModule } from "./modules/favorites/favorites.module";
 import { InquiriesModule } from "./modules/inquiries/inquiries.module";
+import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { ProfilesModule } from "./modules/profiles/profiles.module";
 import { PropertiesModule } from "./modules/properties/properties.module";
 import { ProjectsModule } from "./modules/projects/projects.module";
@@ -28,6 +30,8 @@ import { AuditModule } from "./modules/audit/audit.module";
     HealthModule,
     DashboardModule,
     InquiriesModule,
+    FavoritesModule,
+    NotificationsModule,
     ProfilesModule,
     UsersModule,
     BillingModule,
