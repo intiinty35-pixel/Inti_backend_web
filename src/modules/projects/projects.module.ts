@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
+import { NotificationsModule } from "../notifications/notifications.module";
 import { ChangeProjectStatusUseCase } from "./application/change-project-status.use-case";
 import { CreateProjectUseCase } from "./application/create-project.use-case";
 import { DeleteProjectUseCase } from "./application/delete-project.use-case";
@@ -14,7 +15,7 @@ import { ProjectMediaController } from "./presentation/project-media.controller"
 import { ProjectsController } from "./presentation/projects.controller";
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, NotificationsModule],
   controllers: [ProjectMediaController, ProjectsController],
   providers: [
     CreateProjectUseCase,
