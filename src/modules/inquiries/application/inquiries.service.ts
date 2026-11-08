@@ -1,14 +1,18 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { PrismaService } from "../../../infrastructure/persistence/prisma.service";
+import { NotificationsService } from "../../notifications/application/notifications.service";
 import type { CreateInquiryDto } from "../presentation/create-inquiry.dto";
 
 @Injectable()
 export class InquiriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly notifications?: NotificationsService,
+  ) {}
 
   async create(input: CreateInquiryDto) {
-    const ownerId = await this.resolveOwner(input.listingType, input.listingId);
-    return this.prisma.inquiry.create({
+    const { ownerId, title } = await this.resolveOwner(input.listingType, input.listingId);
+    const inquiry = await this.prisma.inquiry.create({
       data: {
         listingType: input.listingType,
         listingId: input.listingId,
@@ -19,6 +23,16 @@ export class InquiriesService {
         message: normalize(input.message),
       },
     });
+    await this.notifications?.notify({
+      userId: ownerId,
+      type: "INQUIRY_RECEIVED",
+      title: "Nueva consulta",
+      message: `${normalize(input.name)} preguntó por «${title}».`,
+      actionUrl: "/mi-cuenta/consultas",
+      entityType: "INQUIRY",
+      entityId: inquiry.id,
+    });
+    return inquiry;
   }
 
   async listMine(userId: string) {
@@ -48,16 +62,16 @@ export class InquiriesService {
     return inquiry;
   }
 
-  private async resolveOwner(listingType: "PROPERTY" | "PROJECT", listingId: string): Promise<string | null> {
+  private async resolveOwner(listingType: "PROPERTY" | "PROJECT", listingId: string): Promise<{ ownerId: string | null; title: string }> {
     if (listingType === "PROPERTY") {
-      const property = await this.prisma.property.findUnique({ where: { id: listingId }, select: { id: true, ownerId: true, status: true } });
+      const property = await this.prisma.property.findUnique({ where: { id: listingId }, select: { id: true, ownerId: true, status: true, title: true } });
       if (!property || property.status !== "PUBLISHED") throw new NotFoundException("La propiedad no está disponible.");
-      return property.ownerId ?? null;
+      return { ownerId: property.ownerId ?? null, title: property.title ?? "tu propiedad" };
     }
     if (listingType === "PROJECT") {
-      const project = await this.prisma.project.findUnique({ where: { id: listingId }, select: { id: true, ownerId: true, status: true } });
+      const project = await this.prisma.project.findUnique({ where: { id: listingId }, select: { id: true, ownerId: true, status: true, name: true } });
       if (!project || project.status !== "PUBLISHED") throw new NotFoundException("El proyecto no está disponible.");
-      return project.ownerId ?? null;
+      return { ownerId: project.ownerId ?? null, title: project.name ?? "tu proyecto" };
     }
     throw new BadRequestException("Tipo de publicación inválido.");
   }
