@@ -1,8 +1,9 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Param, Put, Query, Req, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Optional, Param, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateIf } from "class-validator";
 import { Transform, Type } from "class-transformer";
 import { PrismaService } from "../../../infrastructure/persistence/prisma.service";
 import { SessionGuard, type AuthenticatedRequest } from "../../auth/session.guard";
+import { NotificationsService } from "../../notifications/application/notifications.service";
 
 class ReviewDto {
   @IsInt() @Min(1) @Max(5)
@@ -22,10 +23,13 @@ class ReviewListQuery {
 
 @Controller("properties/:propertyId/reviews")
 export class PropertyReviewsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly notifications?: NotificationsService,
+  ) {}
 
   private async publishedProperty(id: string) {
-    const property = await this.prisma.property.findFirst({ where: { id, status: "PUBLISHED" }, select: { id: true, ownerId: true } });
+    const property = await this.prisma.property.findFirst({ where: { id, status: "PUBLISHED" }, select: { id: true, ownerId: true, title: true, slug: true } });
     if (!property) throw new NotFoundException("No se encontró la propiedad publicada.");
     return property;
   }
@@ -55,6 +59,17 @@ export class PropertyReviewsController {
       where: { propertyId_userId: { propertyId, userId: user.id } },
       create: { propertyId, userId: user.id, rating: body.rating, comment: body.comment ?? "" },
       update: { rating: body.rating, comment: body.comment },
+    });
+    await this.notifications?.notify({
+      userId: property.ownerId,
+      actorId: request.auth.id,
+      type: "PROPERTY_REVIEW",
+      title: "Nueva valoración",
+      message: `Valoraron «${property.title ?? "tu propiedad"}» con ${body.rating} de 5 estrellas.`,
+      actionUrl: property.slug ? `/propiedades/${property.slug}` : "/",
+      entityType: "PROPERTY",
+      entityId: propertyId,
+      dedupeHours: 6,
     });
     return this.list(propertyId);
   }

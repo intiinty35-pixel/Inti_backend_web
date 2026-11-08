@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
+import { NotificationsModule } from "../notifications/notifications.module";
 import { CreatePropertyUseCase } from "./application/create-property.use-case";
 import { ListPropertiesUseCase } from "./application/list-properties.use-case";
 import { PROPERTY_REPOSITORY } from "./domain/property";
@@ -9,7 +10,7 @@ import { PropertyMediaController } from "./presentation/property-media.controlle
 import { PropertyReviewsController } from "./presentation/property-reviews.controller";
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, NotificationsModule],
   controllers: [PropertiesController, PropertyMediaController, PropertyReviewsController],
   providers: [
     CreatePropertyUseCase,
