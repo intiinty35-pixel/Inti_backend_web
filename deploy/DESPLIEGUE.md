@@ -83,8 +83,10 @@ En cada repositorio, en el servidor: `sh deploy/deploy.sh`. Si cambias el backen
 Como la base vive en este servidor, **haz respaldos**: si el servidor se pierde, se pierden los datos.
 
 ```bash
-sh ~/inti/Inti_backend_web/deploy/backup-db.sh      # guarda ~/inti/backups/inti-AAAAMMDD-HHMMSS.sql.gz (conserva 14)
+sh ~/inti/Inti_backend_web/deploy/backup-db.sh      # guarda ~/inti/backups/inti-AAAAMMDD-HHMMSS.sql.gz (conserva 30 días)
 ```
+
+Es un respaldo completo de la base. Se conservan los últimos 30 días: cada noche se borra el más antiguo (el 1 de diciembre se elimina el del 1 de noviembre) y nunca se borran los 7 más recientes. El plazo se cambia con `BACKUP_KEEP_DAYS`.
 
 Para hacerlo cada noche a las 3:00, ejecuta `crontab -e` y agrega (cambia `rodrigo` por tu usuario):
 ```
