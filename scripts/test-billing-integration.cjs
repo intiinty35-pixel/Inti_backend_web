@@ -96,6 +96,11 @@ async function main() {
   await request(`/billing/orders/${order.id}/receipts`, 'POST', upload('bad.pdf', 'application/pdf'), 'member', 400);
   await request(`/billing/orders/${order.id}/receipts`, 'POST', upload('big.png', 'image/png', Buffer.alloc(9 * 1024 * 1024)), 'member', 413);
   const receipt = await request(`/billing/orders/${order.id}/receipts`, 'POST', upload(), 'member', 201);
+  const approvalQueue = await request('/billing/admin/payment-approvals?page=1&pageSize=15', 'GET', undefined, 'admin');
+  assert(approvalQueue.items.some((item) => item.id === order.id));
+  assert(approvalQueue.items.every((item) => item.status === 'UNDER_REVIEW'));
+  const pendingHistory = await request('/billing/admin/orders?statusGroup=PENDING&page=1&pageSize=50', 'GET', undefined, 'admin');
+  assert(pendingHistory.items.some((item) => item.id === order.id));
   await db.paymentOrder.update({ where: { id: order.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
   await request('/billing/orders', 'POST', orderInput, 'member', 409);
   await db.paymentOrder.update({ where: { id: order.id }, data: { expiresAt: new Date(order.expiresAt) } });
@@ -105,8 +110,10 @@ async function main() {
   assert.equal(privateFile.status, 200);
   assert.equal(privateFile.headers.get('cache-control'), 'private, no-store');
   assert.deepEqual(Buffer.from(await privateFile.arrayBuffer()), png);
-  await request(`/billing/admin/orders/${order.id}/review`, 'PATCH', { action: 'REJECT' }, 'admin', 400);
-  await request(`/billing/admin/orders/${order.id}/review`, 'PATCH', { action: 'REJECT', reason: 'Integration rejection' }, 'admin');
+  await request(`/billing/admin/payment-approvals/${order.id}/decision`, 'PATCH', { action: 'REJECT' }, 'admin', 400);
+  await request(`/billing/admin/payment-approvals/${order.id}/decision`, 'PATCH', { action: 'REJECT', reason: 'Integration rejection' }, 'admin');
+  const queueAfterRejection = await request('/billing/admin/payment-approvals?page=1&pageSize=15', 'GET', undefined, 'admin');
+  assert(!queueAfterRejection.items.some((item) => item.id === order.id));
   assert.equal((await request(`/billing/orders/${order.id}`)).rejectionReason, 'Integration rejection');
   await request(`/billing/orders/${order.id}/receipts`, 'POST', upload(), 'member', 201);
   await request(`/billing/admin/plans/${plan.id}`, 'PUT', { ...planInput, priceBOB: '200.00', maxProperties: 2 }, 'admin');
@@ -116,9 +123,12 @@ async function main() {
   assert.equal(frozen.exchangeRate, '6.96');
   assert.equal(frozen.planSnapshot.maxProperties, 1);
   console.log('Integration: order amounts, snapshot freezing and private receipts verified.');
-  const approvals = await Promise.all([request(`/billing/admin/orders/${order.id}/review`, 'PATCH', { action: 'APPROVE' }, 'admin'), request(`/billing/admin/orders/${order.id}/review`, 'PATCH', { action: 'APPROVE' }, 'admin')]);
+  const approvals = await Promise.all([request(`/billing/admin/payment-approvals/${order.id}/decision`, 'PATCH', { action: 'APPROVE' }, 'admin'), request(`/billing/admin/payment-approvals/${order.id}/decision`, 'PATCH', { action: 'APPROVE' }, 'admin')]);
   assert.equal(approvals[0].subscription.id, approvals[1].subscription.id);
   assert.equal(await db.subscription.count({ where: { orderId: order.id } }), 1);
+  const queueAfterApproval = await request('/billing/admin/payment-approvals?page=1&pageSize=15', 'GET', undefined, 'admin');
+  assert(!queueAfterApproval.items.some((item) => item.id === order.id));
+  await request(`/billing/admin/payment-approvals/${order.id}/decision`, 'PATCH', { action: 'REJECT', reason: 'Cannot reverse approval' }, 'admin', 409);
   console.log('Integration: concurrent approval created exactly one subscription.');
   const account = await request('/billing/account');
   assert.equal(account.current.maxProperties, 1);
@@ -142,7 +152,7 @@ async function main() {
   await request(`/billing/publications/${property.id}/request`, 'POST', {}, 'other', 404);
   const renewal = await request('/billing/orders', 'POST', orderInput, 'member', 201);
   await request(`/billing/orders/${renewal.id}/receipts`, 'POST', upload(), 'member', 201);
-  const renewed = await request(`/billing/admin/orders/${renewal.id}/review`, 'PATCH', { action: 'APPROVE' }, 'admin');
+  const renewed = await request(`/billing/admin/payment-approvals/${renewal.id}/decision`, 'PATCH', { action: 'APPROVE' }, 'admin');
   assert.equal(renewed.subscription.status, 'PENDING');
   assert.equal(renewed.subscription.startsAt, account.current.expiresAt);
   const maintenance = app.get(BillingMaintenanceService);
@@ -179,7 +189,7 @@ async function main() {
   const businessOrder = await request('/billing/orders', 'POST', { planId: business.id, methodId: method.id, currency: 'USD' }, 'other', 201);
   assert.equal(businessOrder.amount, '50'); assert.equal(businessOrder.amountBOB, '350');
   await request(`/billing/orders/${businessOrder.id}/receipts`, 'POST', upload(), 'other', 201);
-  const businessResult = await request(`/billing/admin/orders/${businessOrder.id}/review`, 'PATCH', { action: 'APPROVE' }, 'admin');
+  const businessResult = await request(`/billing/admin/payment-approvals/${businessOrder.id}/decision`, 'PATCH', { action: 'APPROVE' }, 'admin');
   assert.equal(businessResult.subscription.status, 'ACTIVE'); assert.equal(businessResult.subscription.maxProjects, 2);
   assert.equal((await db.subscription.findUnique({ where: { id: free.id } })).status, 'CANCELLED');
   assert.equal((await db.property.findUnique({ where: { id: freeProperty.id } })).subscriptionId, businessResult.subscription.id);

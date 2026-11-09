@@ -71,8 +71,9 @@ export class BillingAdminController {
     return this.catalog.uploadQr(id, file.buffer, req.auth.id);
   }
   @Get("orders") list(@Query() query: BillingQueryDto) { return this.orders.list(query); }
+  @Get("payment-approvals") listPaymentApprovals(@Query() query: BillingQueryDto) { return this.orders.listForApproval(query); }
   @Get("orders/:id") detail(@Param("id") id: string) { return this.orders.detail(id); }
-  @Patch("orders/:id/review") review(@Param("id") id: string, @Body() input: ReviewPaymentDto, @Req() req: AuthenticatedRequest) { return this.orders.review(id, req.auth.id, input); }
+  @Patch("payment-approvals/:id/decision") decidePayment(@Param("id") id: string, @Body() input: ReviewPaymentDto, @Req() req: AuthenticatedRequest) { return this.orders.review(id, req.auth.id, input); }
   @Get("dashboard") dashboard(@Query() query: BillingQueryDto) { return this.orders.dashboard(query); }
   @Get("receipts/:id")
   @Header("Cache-Control", "private, no-store")

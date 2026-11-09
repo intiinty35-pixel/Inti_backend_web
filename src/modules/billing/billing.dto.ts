@@ -50,6 +50,7 @@ export class BillingQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) pageSize = 15;
   @IsOptional() @IsIn(Object.values(PaymentOrderStatus)) status?: PaymentOrderStatus;
+  @IsOptional() @IsIn(["PENDING", "APPROVED", "REJECTED"]) statusGroup?: "PENDING" | "APPROVED" | "REJECTED";
   @IsOptional() @IsIn(["BOB", "USD"]) currency?: string;
   @IsOptional() @IsString() @MaxLength(100) userId?: string;
   @IsOptional() @IsString() @MaxLength(100) planId?: string;

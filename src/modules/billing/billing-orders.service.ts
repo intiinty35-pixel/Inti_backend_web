@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { PaymentOrderStatus, Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../../infrastructure/persistence/prisma.service";
 import { BillingQueryDto, CreateOrderDto, ReviewPaymentDto } from "./billing.dto";
@@ -49,9 +49,12 @@ export class BillingOrdersService {
   }
 
   async list(query: BillingQueryDto, userId?: string) {
+    const statusFilter: Prisma.EnumPaymentOrderStatusFilter | undefined = query.statusGroup
+      ? { in: query.statusGroup === "PENDING" ? ["PENDING", "UNDER_REVIEW"] : [query.statusGroup] }
+      : query.status ? { equals: query.status } : undefined;
     const where: Prisma.PaymentOrderWhereInput = {
       ...(userId || query.userId ? { userId: userId ?? query.userId } : {}),
-      ...(query.status ? { status: query.status } : {}), ...(query.currency ? { currency: query.currency } : {}),
+      ...(statusFilter ? { status: statusFilter } : {}), ...(query.currency ? { currency: query.currency } : {}),
       ...(query.planId ? { planId: query.planId } : {}), ...(query.methodId ? { methodId: query.methodId } : {}),
       ...(query.search ? { number: { contains: query.search, mode: "insensitive" } } : {}),
       ...(query.from || query.to ? { createdAt: { ...(query.from ? { gte: new Date(`${query.from}T00:00:00Z`) } : {}), ...(query.to ? { lte: new Date(`${query.to}T23:59:59.999Z`) } : {}) } } : {}),
@@ -59,6 +62,10 @@ export class BillingOrdersService {
     const total = await this.prisma.paymentOrder.count({ where });
     const items = await this.prisma.paymentOrder.findMany({ where, orderBy: { createdAt: "desc" }, skip: (query.page - 1) * query.pageSize, take: query.pageSize, include: orderInclude });
     return { items, total, page: query.page, pageSize: query.pageSize };
+  }
+
+  async listForApproval(query: BillingQueryDto) {
+    return this.list({ ...query, status: PaymentOrderStatus.UNDER_REVIEW, statusGroup: undefined });
   }
 
   async detail(id: string, userId?: string) {
