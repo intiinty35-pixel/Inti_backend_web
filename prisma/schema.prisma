@@ -540,17 +540,39 @@ model Notification {
 model ComplaintBookEntry {
   id                  String   @id @default(cuid())
   ticketNumber        String   @unique
-  claimantName        String
+  claimantFirstName   String
+  claimantLastName    String   @default("")
   claimantEmail       String
   claimantPhone       String
+  documentType        String   @default("OTHER")
   documentNumber      String?
+  department          String   @default("")
+  municipality        String   @default("")
+  address             String   @default("")
   entryType           String
   serviceDescription  String
+  transactionNumber   String?
+  incidentDate        DateTime? @db.Date
   detail              String
   desiredResolution   String?
   createdAt           DateTime @default(now())
+  attachments         ComplaintAttachment[]
 
   @@index([createdAt])
   @@index([claimantEmail, createdAt])
   @@map("complaint_book_entries")
+}
+
+model ComplaintAttachment {
+  id            String            @id @default(cuid())
+  complaintId   String
+  fileKey       String            @unique
+  originalName  String
+  mimeType      String
+  size          Int
+  createdAt     DateTime          @default(now())
+  complaint     ComplaintBookEntry @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  @@index([complaintId, createdAt])
+  @@map("complaint_attachments")
 }

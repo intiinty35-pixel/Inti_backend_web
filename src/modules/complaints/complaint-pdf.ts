@@ -1,14 +1,9 @@
 export interface ComplaintPdfRecord {
-  ticketNumber: string;
-  claimantName: string;
+  claimantFirstName: string;
+  claimantLastName: string;
   claimantEmail: string;
   claimantPhone: string;
   documentNumber: string | null;
-  entryType: string;
-  serviceDescription: string;
-  detail: string;
-  desiredResolution: string | null;
-  createdAt: Date;
 }
 
 const CP1252_EXTENDED = new Map<number, number>([
@@ -30,78 +25,37 @@ function pdfHex(text: string) {
   return `<${hex.toUpperCase()}>`;
 }
 
-function wrap(value: string, width: number): string[] {
-  const result: string[] = [];
-  for (const sourceLine of value.replace(/\r/g, "").split("\n")) {
-    let line = sourceLine.trim();
-    if (!line) {
-      result.push("");
-      continue;
-    }
-    while (line.length > width) {
-      let splitAt = line.lastIndexOf(" ", width);
-      if (splitAt < 1) splitAt = width;
-      result.push(line.slice(0, splitAt).trim());
-      line = line.slice(splitAt).trim();
-    }
-    result.push(line);
-  }
-  return result;
-}
-
 export function createComplaintPdf(entry: ComplaintPdfRecord): Buffer {
-  const dateLabel = new Intl.DateTimeFormat("es-BO", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: "America/La_Paz",
-  }).format(entry.createdAt);
-  const pages: string[] = [];
-  let commands: string[] = [];
-  let y = 744;
-  let pageNumber = 0;
+  const commands = [
+    "0.05 0.20 0.43 rg 0 523 842 72 re f",
+    `BT /F2 18 Tf 48 561 Td ${pdfHex("DATOS DEL CONSUMIDOR")} Tj ET`,
+    `BT /F1 9 Tf 49 541 Td ${pdfHex("Libro de Reclamaciones")} Tj ET`,
+  ];
+  const left = 48;
+  const widths = [145, 135, 135, 120, 211];
+  const tableWidth = widths.reduce((total, width) => total + width, 0);
+  const headerTop = 480;
+  const headerHeight = 42;
+  const rowHeight = 66;
+  const rowTop = headerTop - headerHeight;
+  const rowBottom = rowTop - rowHeight;
+  const headings = ["Número de documento", "Nombres", "Apellidos", "Teléfono", "Correo electrónico"];
+  const values = [entry.documentNumber, entry.claimantFirstName, entry.claimantLastName, entry.claimantPhone, entry.claimantEmail];
 
-  function startPage() {
-    pageNumber += 1;
-    commands = [
-      "0.05 0.20 0.43 rg 0 770 595 72 re f",
-      `BT /F2 18 Tf 48 808 Td ${pdfHex("LIBRO DE RECLAMACIONES")} Tj ET`,
-      `BT /F1 9 Tf 49 788 Td ${pdfHex(`Constancia de reclamo · ${entry.ticketNumber}`)} Tj ET`,
-      `BT /F1 8 Tf 500 28 Td ${pdfHex(String(pageNumber))} Tj ET`,
-      "0.75 0.79 0.84 RG 48 48 m 547 48 l S",
-    ];
-    y = 744;
-  }
+  commands.push(`0.90 0.93 0.97 rg ${left} ${rowTop} ${tableWidth} ${headerHeight} re f`);
+  commands.push(`0.98 0.985 0.995 rg ${left} ${rowBottom} ${tableWidth} ${rowHeight} re f`);
+  commands.push(`0.74 0.79 0.86 RG 0.7 w ${left} ${rowBottom} ${tableWidth} ${headerHeight + rowHeight} re S`);
+  let columnX = left;
+  headings.forEach((heading, index) => {
+    if (index > 0) commands.push(`0.78 0.82 0.87 RG 0.6 w ${columnX} ${rowBottom} m ${columnX} ${headerTop} l S`);
+    commands.push(`0.19 0.26 0.37 rg BT /F2 8 Tf ${columnX + 6} ${rowTop + 17} Td ${pdfHex(heading)} Tj ET`);
+    const value = (values[index] ?? "").slice(0, index === 4 ? 42 : 27);
+    if (value) commands.push(`0.12 0.16 0.22 rg BT /F1 9 Tf ${columnX + 6} ${rowBottom + 29} Td ${pdfHex(value)} Tj ET`);
+    columnX += widths[index];
+  });
+  commands.push("0.75 0.79 0.84 RG 48 30 m 794 30 l S");
 
-  function writeLine(text: string, bold = false, size = 10, color = "0.12 0.16 0.22") {
-    if (y < 68) {
-      pages.push(commands.join("\n"));
-      startPage();
-    }
-    commands.push(`${color} rg BT /${bold ? "F2" : "F1"} ${size} Tf 50 ${y} Td ${pdfHex(text)} Tj ET`);
-    y -= Math.round(size * 1.55);
-  }
-
-  function writeField(label: string, value: string, width = 96) {
-    writeLine(label, true, 10, "0.05 0.20 0.43");
-    for (const line of wrap(value || "No indicado", width)) writeLine(line || " ", false, 10);
-    y -= 7;
-  }
-
-  startPage();
-  writeLine("Constancia de recepción", true, 14, "0.05 0.20 0.43");
-  writeLine(`Código: ${entry.ticketNumber}`, true, 11);
-  writeLine(`Fecha y hora: ${dateLabel}`, false, 10);
-  y -= 12;
-  writeField("Datos de la persona", entry.claimantName);
-  writeField("Documento de identidad", entry.documentNumber || "No indicado");
-  writeField("Correo electrónico", entry.claimantEmail);
-  writeField("Teléfono", entry.claimantPhone);
-  writeField("Tipo", entry.entryType === "COMPLAINT" ? "Reclamo" : "Queja");
-  writeField("Servicio relacionado", entry.serviceDescription);
-  writeField("Detalle", entry.detail, 95);
-  writeField("Solución solicitada", entry.desiredResolution || "No indicada", 95);
-  writeLine("Documento generado desde el registro del Libro de Reclamaciones de Inti.", false, 8, "0.37 0.41 0.47");
-  pages.push(commands.join("\n"));
+  const pages = [commands.join("\n")];
 
   const objects: string[] = [
     "<< /Type /Catalog /Pages 2 0 R >>",
@@ -115,7 +69,7 @@ export function createComplaintPdf(entry: ComplaintPdfRecord): Buffer {
     const contentId = pageId + 1;
     pageIds.push(pageId);
     const stream = `${content}\n`;
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`);
     objects.push(`<< /Length ${Buffer.byteLength(stream, "ascii")} >>\nstream\n${stream}endstream`);
   });
   objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageIds.length} >>`;
