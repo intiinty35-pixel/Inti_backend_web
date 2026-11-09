@@ -70,7 +70,8 @@ curl -sI https://intinmobiliaria.com/ | head -1      # HTTP/2 200
 Entra a `https://intinmobiliaria.com/iniciar-sesion` con `ADMIN_EMAIL` y `ADMIN_PASSWORD`. Para cargar datos de demostración (opcional):
 
 ```bash
-cd ~/inti/Inti_backend_web/deploy && docker compose exec backend node prisma/seed-projects.cjs
+docker exec inti_backend node prisma/seed-demo.cjs        # 4 propiedades
+docker exec inti_backend node prisma/seed-projects.cjs    # 6 proyectos
 ```
 
 ## 6. Actualizar

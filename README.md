@@ -48,8 +48,10 @@ La API escucha en `http://localhost:3001`. `DATABASE_URL` es la conexión de la 
 
 Datos de demostración (todos repetibles, no duplican):
 
-- `pnpm db:seed`: propiedades.
+- `pnpm db:seed`: 4 propiedades.
 - `pnpm db:seed:projects`: 6 proyectos (obra nueva, comercial, lotizaciones y un borrador).
+
+  Los dos crean por su cuenta lo que necesitan para verse en el sitio: la cuenta demo (si no existe) y una suscripción gratuita vigente por 365 días. Basta con ejecutarlos, en cualquier orden. En producción la contraseña de la cuenta que crean se genera al azar y se muestra una sola vez en la salida del comando.
 - `pnpm db:seed:users`: cuentas demo `agente@inti.local` y `usuario@inti.local` (contraseña inicial `IntiDemo2026!`, configurable con `DEMO_USERS_PASSWORD`). También sincroniza la cuenta administradora con `ADMIN_EMAIL` y `ADMIN_PASSWORD`. No se ejecuta en producción.
 
 Al bajar cambios del repositorio, ejecuta `pnpm install`, `pnpm db:generate` y `pnpm db:deploy`.
