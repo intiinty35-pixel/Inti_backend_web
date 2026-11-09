@@ -1,4 +1,5 @@
 const { PrismaClient } = require("@prisma/client");
+const { ensureDemoAccounts, ensureDemoSubscription } = require("./demo-support.cjs");
 
 const prisma = new PrismaClient();
 const frontendUrl = process.env.FRONTEND_PUBLIC_URL ?? "http://localhost:3000";
@@ -163,7 +164,7 @@ const demoProjects = [
   },
 ];
 
-async function seedProject(project, ownerId) {
+async function seedProject(project, ownerId, subscriptionId) {
   const { units, media, amenities, timeline, comments, ...fields } = project;
   // Reemplaza el proyecto demo anterior (si existe) para poder repetir el seed sin duplicados.
   await prisma.project.deleteMany({ where: { slug: project.slug } });
@@ -171,6 +172,7 @@ async function seedProject(project, ownerId) {
     data: {
       ...fields,
       ownerId,
+      subscriptionId,
       units: { create: units },
       media: { create: media },
       amenities: { create: amenities.map((name) => ({ name })) },
@@ -181,8 +183,10 @@ async function seedProject(project, ownerId) {
 }
 
 async function main() {
-  const agent = await prisma.user.findUnique({ where: { email: (process.env.DEMO_AGENT_EMAIL || "agente@inti.local").toLowerCase() } });
-  for (const project of demoProjects) await seedProject(project, agent?.id);
+  // Crea la cuenta demo si falta y le activa un plan gratuito: así los proyectos se ven en el sitio.
+  const { agent } = await ensureDemoAccounts(prisma);
+  const subscriptionId = await ensureDemoSubscription(prisma, agent.id);
+  for (const project of demoProjects) await seedProject(project, agent.id, subscriptionId);
   console.log(`Se cargaron ${demoProjects.length} proyectos de demostración.`);
 }
 

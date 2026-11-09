@@ -1,4 +1,5 @@
 const { PrismaClient } = require("@prisma/client");
+const { ensureDemoAccounts, ensureDemoSubscription } = require("./demo-support.cjs");
 
 const prisma = new PrismaClient();
 const frontendUrl = process.env.FRONTEND_PUBLIC_URL ?? "http://localhost:3000";
@@ -168,15 +169,18 @@ const demoProperties = [
 ];
 
 async function main() {
-  const agent = await prisma.user.findUnique({ where: { email: (process.env.DEMO_AGENT_EMAIL || "agente@inti.local").toLowerCase() } });
-  const user = await prisma.user.findUnique({ where: { email: (process.env.DEMO_USER_EMAIL || "usuario@inti.local").toLowerCase() } });
+  // Crea la cuenta demo si falta y le activa un plan gratuito: así las propiedades se ven en el sitio.
+  const { agent, user } = await ensureDemoAccounts(prisma);
+  const subscriptions = { [agent.id]: await ensureDemoSubscription(prisma, agent.id), [user.id]: await ensureDemoSubscription(prisma, user.id) };
 
   for (const property of demoProperties) {
-    const ownerId = property.createdByRole === "USER" ? user?.id : agent?.id;
+    const ownerId = property.createdByRole === "USER" ? user.id : agent.id;
+    const subscriptionId = subscriptions[ownerId];
     await prisma.property.upsert({
       where: { slug: property.slug },
       update: {
         ownerId,
+        subscriptionId,
         createdByRole: property.createdByRole,
         status: "PUBLISHED",
         contactName: property.contactName,
@@ -187,6 +191,7 @@ async function main() {
       create: {
         slug: property.slug,
         ownerId,
+        subscriptionId,
         createdByRole: property.createdByRole,
         operationType: property.operationType,
         propertyType: property.propertyType,
